@@ -1,24 +1,33 @@
 module HW3.Evaluator where
-import HW3.Base (HiError, HiValue (HiValueNumber, HiValueFunction, HiValueNull), HiExpr (HiExprValue, HiExprApply))
+import HW3.Base (HiError (..), HiValue (..), HiExpr (..), HiFun (..))
 import qualified Control.Monad
 
 eval :: Monad m => HiExpr -> m (Either HiError HiValue)
-eval (HiExprValue x) = return $ Right x
-eval (HiExprApply fexpr args) = do
-    return $ evalInEitherMonad (HiExprApply fexpr args)
+eval = return . evalInEitherMonad
 
-evalInEitherMonad :: HiExpr -> Either a HiValue
+evalInEitherMonad :: HiExpr -> Either HiError HiValue
 evalInEitherMonad (HiExprValue x) = Right x
 evalInEitherMonad (HiExprApply fexpr args) = do
     xxx <- evalInEitherMonad fexpr
     args <- evalListInEitherMonad args
     apply xxx args
-evalInEitherMonad _ = undefined
 
-apply :: Monad m => HiValue -> [HiValue] -> m HiValue
-apply (HiValueFunction fun) lst = do
-    return HiValueNull
-apply _ _ = undefined
+apply :: HiValue -> [HiValue] -> Either HiError HiValue
+apply (HiValueFunction fun) = case fun of
+   HiFunDiv -> doDiv
+   HiFunMul -> doNumOp (\a b -> return $ HiValueNumber (a * b))
+   HiFunAdd -> doNumOp (\a b -> return $ HiValueNumber (a + b))
+   HiFunSub -> doNumOp (\a b -> return $ HiValueNumber (a - b))
+apply _ = const $ Left HiErrorInvalidFunction
 
-evalListInEitherMonad :: [HiExpr] -> Either a [HiValue]
+doNumOp :: (Rational -> Rational -> Either HiError HiValue) -> [HiValue] -> Either HiError HiValue
+doNumOp f [HiValueNumber a, HiValueNumber b] = f a b
+doNumOp _ l = if length l /= 2 then Left HiErrorArityMismatch else Left HiErrorInvalidArgument
+
+doDiv :: [HiValue] -> Either HiError HiValue
+doDiv = doNumOp $ \a b -> if b /= 0
+    then return $ HiValueNumber (a / b)
+    else Left HiErrorDivideByZero
+
+evalListInEitherMonad :: [HiExpr] -> Either HiError [HiValue]
 evalListInEitherMonad = mapM evalInEitherMonad

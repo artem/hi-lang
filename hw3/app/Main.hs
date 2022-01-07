@@ -14,13 +14,13 @@ main = runInputT defaultSettings loop
            case minput of
                Nothing -> return ()
                Just "quit" -> return ()
-            --    Just input -> do let res = parse input >>= eval
+               Just input -> do let res = parse input >>= eval
+                                case res of
+                                    Right (Right x) -> outputStrLn $ show (prettyValue x)
+                                    x -> outputStrLn $ show x
+                                loop
+            --    Just input -> do let res = parse input
             --                     case res of
-            --                         Right (Right x) -> outputStrLn $ show (prettyValue x)
+            --                         Right x -> outputStrLn $ show x
             --                         _ -> outputStrLn "eggog"
             --                     loop
-               Just input -> do let res = parse input
-                                case res of
-                                    Right x -> outputStrLn $ show x
-                                    _ -> outputStrLn "eggog"
-                                loop
