@@ -6,10 +6,21 @@ data HiFun =
   | HiFunMul
   | HiFunAdd
   | HiFunSub
+  | HiFunNot
+  | HiFunAnd
+  | HiFunOr
+  | HiFunLessThan
+  | HiFunGreaterThan
+  | HiFunEquals
+  | HiFunNotLessThan
+  | HiFunNotGreaterThan
+  | HiFunNotEquals
+  | HiFunIf
   deriving (Eq, Ord, Show)
 
 data HiValue =
-    HiValueNumber Rational
+    HiValueBool Bool
+  | HiValueNumber Rational
   | HiValueFunction HiFun
   | HiValueNull
   | HiValueString Text
