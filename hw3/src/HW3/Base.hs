@@ -1,5 +1,5 @@
 module HW3.Base where
-import Data.Text
+import Data.Text ( Text )
 
 data HiFun =
     HiFunDiv
@@ -16,6 +16,11 @@ data HiFun =
   | HiFunNotGreaterThan
   | HiFunNotEquals
   | HiFunIf
+  | HiFunLength
+  | HiFunToUpper
+  | HiFunToLower
+  | HiFunReverse
+  | HiFunTrim
   deriving (Eq, Ord, Show)
 
 data HiValue =

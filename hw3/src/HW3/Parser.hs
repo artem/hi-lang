@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 module HW3.Parser where
-import Data.Text (Text)
+import Data.Text (Text, pack)
 import Data.Void
 import Text.Megaparsec
 import Text.Megaparsec.Char
@@ -34,7 +34,12 @@ pFun = choice
   , HiFunLessThan        <$ symbol "less-than"
   , HiFunOr              <$ symbol "or"
   , HiFunAnd             <$ symbol "and"
-  , HiFunNot             <$ symbol "not" ]
+  , HiFunNot             <$ symbol "not"
+  , HiFunLength  <$ symbol "length"
+  , HiFunToUpper <$ symbol "to-upper"
+  , HiFunToLower <$ symbol "to-lower"
+  , HiFunReverse <$ symbol "reverse"
+  , HiFunTrim    <$ symbol "trim" ]
 
 consBinOp :: HiFun -> HiExpr -> HiExpr -> HiExpr
 consBinOp c a b = HiExprApply (HiExprValue $ HiValueFunction c) [a, b]
@@ -88,7 +93,11 @@ pExpr = do
     try $ pAppl fun <|> return fun
 
 pValue :: Parser HiValue
-pValue = try (HiValueFunction <$> pFun) <|> (HiValueBool <$> pBool) <|> (HiValueNumber <$> pNum)
+pValue = try (HiValueFunction <$> pFun)
+  <|> (HiValueBool <$> pBool)
+  <|> (HiValueNumber <$> pNum)
+  <|> (HiValueNull <$ symbol "null")
+  <|> (HiValueString <$> (pack <$> (char '"' *> manyTill L.charLiteral (symbol "\""))))
 
 pNum :: Parser Rational
 pNum = lexeme $ toRational <$> L.signed space L.scientific

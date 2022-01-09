@@ -23,6 +23,11 @@ instance Pretty HiFun where
     HiFunNotGreaterThan -> "not-greater-than"
     HiFunNotEquals -> "not-equals"
     HiFunIf -> "if"
+    HiFunLength -> "length"
+    HiFunToUpper -> "to-upper"
+    HiFunToLower -> "to-lower"
+    HiFunReverse -> "reverse"
+    HiFunTrim -> "trim"
 
 prettyValue :: HiValue -> Doc AnsiStyle
 prettyValue (HiValueNumber x) = pretty x

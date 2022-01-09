@@ -1,6 +1,11 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 module HW3.Evaluator where
 import HW3.Base (HiError (..), HiValue (..), HiExpr (..), HiFun (..))
 import Control.Monad ((>=>))
+import qualified Data.Text as T
+import Data.Semigroup (stimes)
+import Data.Ratio (denominator, numerator)
 
 eval :: Monad m => HiExpr -> m (Either HiError HiValue)
 eval = return . evalInEitherMonad
@@ -15,9 +20,9 @@ evalInEitherMonad (HiExprApply fexpr args) = do
 apply :: HiValue -> [HiValue] -> Either HiError HiValue
 apply (HiValueFunction fun) = case fun of
    HiFunDiv -> doDiv
-   HiFunMul -> doNumOp (\a b -> return $ HiValueNumber (a * b))
-   HiFunAdd -> doNumOp (\a b -> return $ HiValueNumber (a + b))
-   HiFunSub -> doNumOp (\a b -> return $ HiValueNumber (a - b))
+   HiFunMul -> doMul
+   HiFunAdd -> doPlus
+   HiFunSub -> doSub
    HiFunNot -> doNot
    HiFunAnd -> doAnd
    HiFunOr -> doOr
@@ -28,8 +33,62 @@ apply (HiValueFunction fun) = case fun of
    HiFunNotGreaterThan -> doComp GT >=> doNot . (:[])
    HiFunNotEquals -> doComp EQ >=> doNot . (:[])
    HiFunIf -> doIf
-
+   HiFunLength -> doLen
+   HiFunToUpper -> doStrFun T.toUpper
+   HiFunToLower -> doStrFun T.toLower
+   HiFunReverse -> doStrFun T.reverse
+   HiFunTrim -> doStrFun T.strip
+apply (HiValueString s) = applyStr s
 apply _ = const $ Left HiErrorInvalidFunction
+
+safeToInt :: Rational -> Either HiError Int
+safeToInt x
+  | not (isInt x) = Left HiErrorInvalidArgument
+  | otherwise = return $ fromInteger $ numerator x
+
+slice :: Int -> Int -> T.Text -> T.Text
+slice x y = if x >= 0
+    then
+        if y >= 0 then
+            (T.drop x) . (T.take y)
+        else
+            (T.drop x) . (T.dropEnd (-y))
+    else
+        if y > 0 then
+            (\s -> T.drop (x + T.length s) (T.take y s))
+        else
+            T.takeEnd (y-x) . (T.dropEnd (-y))
+
+
+leftSlice :: Int -> T.Text -> T.Text
+leftSlice x = if x < 0 then T.takeEnd (-x) else T.drop x
+
+applyStr :: T.Text -> [HiValue] -> Either HiError HiValue
+applyStr t [HiValueNumber a] = do
+    x <- safeToInt a
+    let s = T.unpack t
+    if x < 0 || x >= length s then return HiValueNull
+    else return $ HiValueString $ T.singleton $ s !! x
+applyStr t [HiValueNumber a, HiValueNumber b] = do
+    x <- safeToInt a
+    y <- safeToInt b
+    return $ HiValueString $ slice x y t
+applyStr t [HiValueNumber a, HiValueNull] = do
+    x <- safeToInt a
+    return $ HiValueString $ leftSlice x t
+applyStr t [HiValueNull, HiValueNumber b] = do
+    y <- safeToInt b
+    return $ HiValueString $ slice 0 y t
+applyStr t [HiValueNull, HiValueNull] = return $ HiValueString t
+applyStr _ l = arityErr 2 l
+
+doLen :: [HiValue] -> Either HiError HiValue
+doLen [HiValueString s] = return $ HiValueNumber $ fromIntegral $ T.length s
+doLen l = arityErr 1 l
+
+doStrFun :: (T.Text -> T.Text) -> [HiValue] -> Either HiError HiValue
+doStrFun f [HiValueString s] = return $ HiValueString $ f s
+doStrFun _ l = arityErr 1 l
 
 arityErr :: Int -> [HiValue] -> Either HiError HiValue
 arityErr x l = if length l /= x then Left HiErrorArityMismatch else Left HiErrorInvalidArgument
@@ -54,14 +113,31 @@ doIf :: [HiValue] -> Either HiError HiValue
 doIf [HiValueBool cond, a, b] = return $ if cond then a else b
 doIf l = arityErr 3 l
 
-doNumOp :: (Rational -> Rational -> Either HiError HiValue) -> [HiValue] -> Either HiError HiValue
-doNumOp f [HiValueNumber a, HiValueNumber b] = f a b
-doNumOp _ l = arityErr 2 l
+doPlus :: [HiValue] -> Either HiError HiValue
+doPlus [HiValueNumber a, HiValueNumber b] = return $ HiValueNumber (a + b)
+doPlus [HiValueString a, HiValueString b] = return $ HiValueString (T.append a b)
+doPlus l = arityErr 2 l
+
+isInt :: Rational -> Bool
+isInt x = denominator x == 1
+
+doMul :: [HiValue] -> Either HiError HiValue
+doMul [HiValueNumber a, HiValueNumber b] = return $ HiValueNumber (a * b)
+doMul [HiValueString a, HiValueNumber b]
+  | b <= 0 = Left HiErrorInvalidArgument
+  | otherwise = safeToInt b >>= \x -> return $ HiValueString (stimes x a)
+doMul l = arityErr 2 l
+
+doSub :: [HiValue] -> Either HiError HiValue
+doSub [HiValueNumber a, HiValueNumber b] = return $ HiValueNumber (a - b)
+doSub l = arityErr 2 l
 
 doDiv :: [HiValue] -> Either HiError HiValue
-doDiv = doNumOp $ \a b -> if b /= 0
-    then return $ HiValueNumber (a / b)
-    else Left HiErrorDivideByZero
+doDiv [HiValueNumber a, HiValueNumber b]
+  | b /= 0 = return $ HiValueNumber (a / b)
+  | otherwise = Left HiErrorDivideByZero
+doDiv [HiValueString a, HiValueString b] = return $ HiValueString (T.intercalate "/" [a, b])
+doDiv l = arityErr 2 l
 
 evalListInEitherMonad :: [HiExpr] -> Either HiError [HiValue]
 evalListInEitherMonad = mapM evalInEitherMonad
