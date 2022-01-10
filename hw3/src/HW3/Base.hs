@@ -61,3 +61,13 @@ data HiError =
   | HiErrorArityMismatch
   | HiErrorDivideByZero
   deriving (Eq, Ord, Show)
+
+data HiAction =
+    HiActionRead  FilePath
+  | HiActionWrite FilePath ByteString
+  | HiActionMkDir FilePath
+  | HiActionChDir FilePath
+  | HiActionCwd
+
+class Monad m => HiMonad m where
+  runAction :: HiAction -> m HiValue

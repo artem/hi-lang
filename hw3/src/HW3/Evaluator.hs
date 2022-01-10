@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 module HW3.Evaluator where
-import HW3.Base (HiError (..), HiValue (..), HiExpr (..), HiFun (..))
+import HW3.Base (HiError (..), HiValue (..), HiExpr (..), HiFun (..), HiMonad)
 import Control.Monad ((>=>), foldM)
 import qualified Data.Text as T
 import Data.Semigroup (stimes)
@@ -9,7 +9,6 @@ import Data.Ratio (denominator, numerator)
 import Data.Sequence (fromList, Seq (..), (><), reverse, lookup, take, drop)
 import Data.Maybe (fromMaybe)
 import Data.Text.Encoding (decodeUtf8', encodeUtf8)
-import Control.Applicative ((<|>))
 import Data.Either (fromRight)
 import Data.Functor ((<&>))
 import Data.ByteString (pack, unpack, append)
@@ -19,15 +18,15 @@ import Codec.Compression.Zlib (compressWith, bestCompression, CompressParams (co
 import Data.ByteString.Lazy (fromStrict, toStrict)
 import Codec.Serialise (serialise, deserialise)
 
-eval :: Monad m => HiExpr -> m (Either HiError HiValue)
+eval :: HiMonad m => HiExpr -> m (Either HiError HiValue)
 eval = return . evalInEitherMonad
 
 evalInEitherMonad :: HiExpr -> Either HiError HiValue
 evalInEitherMonad (HiExprValue x) = Right x
 evalInEitherMonad (HiExprApply fexpr args) = do
     xxx <- evalInEitherMonad fexpr
-    args <- evalListInEitherMonad args
-    apply xxx args
+    args' <- evalListInEitherMonad args
+    apply xxx args'
 
 apply :: HiValue -> [HiValue] -> Either HiError HiValue
 apply (HiValueFunction fun) = case fun of
@@ -171,7 +170,7 @@ applyList _ l = arityErr 2 l
 sliceList :: Int -> Int -> Seq HiValue -> Seq HiValue
 sliceList a b l = Data.Sequence.take (y - x) (Data.Sequence.drop x l)
     where
-        norm x = if x < 0 then x + length l else x
+        norm n = if n < 0 then n + length l else n
         x = norm a
         y = norm b
 
@@ -193,7 +192,7 @@ doEnUtf8 [HiValueString s] = return $ HiValueBytes $ encodeUtf8 s
 doEnUtf8 l = arityErr 1 l
 
 doReverse :: [HiValue] -> Either HiError HiValue
-doReverse t@[HiValueString s] = doStrFun T.reverse t
+doReverse t@[HiValueString _] = doStrFun T.reverse t
 doReverse [HiValueList l] = return $ HiValueList $ Data.Sequence.reverse l
 doReverse l = arityErr 1 l
 
@@ -214,7 +213,7 @@ doOr [HiValueBool a, HiValueBool b] = return $ HiValueBool $ a || b
 doOr l = arityErr 2 l
 
 doComp :: Ordering -> [HiValue] -> Either HiError HiValue
-doComp exp [a, b] = return $ HiValueBool $ compare a b == exp
+doComp p [a, b] = return $ HiValueBool $ compare a b == p
 doComp _ l = arityErr 2 l
 
 doNot :: [HiValue] -> Either HiError HiValue
