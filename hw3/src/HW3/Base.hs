@@ -1,5 +1,6 @@
 module HW3.Base where
 import Data.Text ( Text )
+import Data.Sequence (Seq)
 
 data HiFun =
     HiFunDiv
@@ -21,6 +22,9 @@ data HiFun =
   | HiFunToLower
   | HiFunReverse
   | HiFunTrim
+  | HiFunList
+  | HiFunRange
+  | HiFunFold
   deriving (Eq, Ord, Show)
 
 data HiValue =
@@ -29,6 +33,7 @@ data HiValue =
   | HiValueFunction HiFun
   | HiValueNull
   | HiValueString Text
+  | HiValueList (Seq HiValue)
   deriving (Eq, Ord, Show)
 
 data HiExpr =

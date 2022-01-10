@@ -39,7 +39,10 @@ pFun = choice
   , HiFunToUpper <$ symbol "to-upper"
   , HiFunToLower <$ symbol "to-lower"
   , HiFunReverse <$ symbol "reverse"
-  , HiFunTrim    <$ symbol "trim" ]
+  , HiFunTrim    <$ symbol "trim"
+  , HiFunList  <$ symbol "list"
+  , HiFunRange <$ symbol "range"
+  , HiFunFold  <$ symbol "fold" ]
 
 consBinOp :: HiFun -> HiExpr -> HiExpr -> HiExpr
 consBinOp c a b = HiExprApply (HiExprValue $ HiValueFunction c) [a, b]
@@ -89,7 +92,7 @@ pAppl fun = do
 
 pExpr :: Parser HiExpr
 pExpr = do
-    fun <- parens pOp <|> HiExprValue <$> pValue
+    fun <- parens pOp <|> pList <|> HiExprValue <$> pValue
     try $ pAppl fun <|> return fun
 
 pValue :: Parser HiValue
@@ -97,7 +100,15 @@ pValue = try (HiValueFunction <$> pFun)
   <|> (HiValueBool <$> pBool)
   <|> (HiValueNumber <$> pNum)
   <|> (HiValueNull <$ symbol "null")
-  <|> (HiValueString <$> (pack <$> (char '"' *> manyTill L.charLiteral (symbol "\""))))
+  <|> (HiValueString <$> pStr)
+
+pStr :: Parser Text
+pStr = pack <$> (char '"' *> manyTill L.charLiteral (symbol "\""))
+
+-- | Parses into `list ( PARAMS )`
+pList :: Parser HiExpr
+pList = HiExprApply (HiExprValue (HiValueFunction HiFunList))
+  <$> between (symbol "[") (symbol "]") pParamList
 
 pNum :: Parser Rational
 pNum = lexeme $ toRational <$> L.signed space L.scientific

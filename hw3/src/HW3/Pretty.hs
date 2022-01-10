@@ -4,6 +4,8 @@ module HW3.Pretty where
 import HW3.Base (HiValue (..), HiFun (..))
 import Prettyprinter
 import Prettyprinter.Render.Terminal
+import Data.Sequence (Seq)
+import Data.Foldable (toList)
 
 instance Pretty Rational where pretty = unsafeViaShow
 
@@ -28,10 +30,17 @@ instance Pretty HiFun where
     HiFunToLower -> "to-lower"
     HiFunReverse -> "reverse"
     HiFunTrim -> "trim"
+    HiFunList -> "list"
+    HiFunRange -> "range"
+    HiFunFold -> "fold"
+
+instance Pretty HiValue where
+  pretty (HiValueNumber x) = pretty x
+  pretty (HiValueFunction x) = pretty x
+  pretty (HiValueBool x) = pretty x
+  pretty HiValueNull = pretty "null"
+  pretty (HiValueString x) = pretty x
+  pretty (HiValueList x) = pretty $ toList x
 
 prettyValue :: HiValue -> Doc AnsiStyle
-prettyValue (HiValueNumber x) = pretty x
-prettyValue (HiValueFunction x) = pretty x
-prettyValue (HiValueBool x) = pretty x
-prettyValue HiValueNull = pretty "null"
-prettyValue (HiValueString x) = pretty x
+prettyValue = pretty

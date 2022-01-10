@@ -2,10 +2,12 @@
 
 module HW3.Evaluator where
 import HW3.Base (HiError (..), HiValue (..), HiExpr (..), HiFun (..))
-import Control.Monad ((>=>))
+import Control.Monad ((>=>), foldM)
 import qualified Data.Text as T
 import Data.Semigroup (stimes)
 import Data.Ratio (denominator, numerator)
+import Data.Sequence (fromList, Seq (..), (><), reverse, lookup, take, drop)
+import Data.Maybe (fromMaybe)
 
 eval :: Monad m => HiExpr -> m (Either HiError HiValue)
 eval = return . evalInEitherMonad
@@ -36,18 +38,36 @@ apply (HiValueFunction fun) = case fun of
    HiFunLength -> doLen
    HiFunToUpper -> doStrFun T.toUpper
    HiFunToLower -> doStrFun T.toLower
-   HiFunReverse -> doStrFun T.reverse
+   HiFunReverse -> doReverse
    HiFunTrim -> doStrFun T.strip
+   HiFunList -> doList
+   HiFunRange -> doRange
+   HiFunFold -> doInitFold
 apply (HiValueString s) = applyStr s
+apply (HiValueList l) = applyList l
 apply _ = const $ Left HiErrorInvalidFunction
+
+applyBin :: HiValue -> HiValue -> HiValue -> Either HiError HiValue
+applyBin f x y = apply f [x, y]
+
+doInitFold :: [HiValue] -> Either HiError HiValue
+doInitFold [f, HiValueList (x :<| (y :<| rest))] = apply f [x, y] >>= \acc -> foldM (applyBin f) acc rest
+doInitFold l = arityErr 2 l
+
+doList :: [HiValue] -> Either HiError HiValue
+doList = return . HiValueList . fromList
+
+doRange :: [HiValue] -> Either HiError HiValue
+doRange [HiValueNumber a, HiValueNumber b] = doList $ map HiValueNumber [a..b]
+doRange l = arityErr 2 l
 
 safeToInt :: Rational -> Either HiError Int
 safeToInt x
   | not (isInt x) = Left HiErrorInvalidArgument
   | otherwise = return $ fromInteger $ numerator x
 
-slice :: Int -> Int -> T.Text -> T.Text
-slice x y = if x >= 0
+sliceStr :: Int -> Int -> T.Text -> T.Text
+sliceStr x y = if x >= 0
     then
         if y >= 0 then
             (T.drop x) . (T.take y)
@@ -72,23 +92,58 @@ applyStr t [HiValueNumber a] = do
 applyStr t [HiValueNumber a, HiValueNumber b] = do
     x <- safeToInt a
     y <- safeToInt b
-    return $ HiValueString $ slice x y t
+    return $ HiValueString $ sliceStr x y t
 applyStr t [HiValueNumber a, HiValueNull] = do
     x <- safeToInt a
     return $ HiValueString $ leftSlice x t
 applyStr t [HiValueNull, HiValueNumber b] = do
     y <- safeToInt b
-    return $ HiValueString $ slice 0 y t
+    return $ HiValueString $ sliceStr 0 y t
 applyStr t [HiValueNull, HiValueNull] = return $ HiValueString t
 applyStr _ l = arityErr 2 l
 
+applyList :: Seq HiValue -> [HiValue] -> Either HiError HiValue
+applyList l [HiValueNumber a] = do
+    x <- safeToInt a
+    return $ fromMaybe HiValueNull (Data.Sequence.lookup x l)
+applyList l [HiValueNumber a, HiValueNumber b] = do
+    x <- safeToInt a
+    y <- safeToInt b
+    return $ HiValueList $ sliceList x y l
+applyList l [HiValueNumber a, HiValueNull] = do
+    x <- safeToInt a
+    return $ HiValueList $ sliceList x (length l) l
+applyList l [HiValueNull, HiValueNumber b] = do
+    y <- safeToInt b
+    return $ HiValueList $ sliceList 0 y l
+applyList l [HiValueNull, HiValueNull] = return $ HiValueList l
+applyList _ l = arityErr 2 l
+
+sliceList :: Int -> Int -> Seq HiValue -> Seq HiValue
+sliceList a b l = Data.Sequence.take (y - x) (Data.Sequence.drop x l)
+    where
+        norm x = if x < 0 then x + length l else x
+        x = norm a
+        y = norm b
+
 doLen :: [HiValue] -> Either HiError HiValue
 doLen [HiValueString s] = return $ HiValueNumber $ fromIntegral $ T.length s
+doLen [HiValueList l] = return $ HiValueNumber $ fromIntegral $ length l
 doLen l = arityErr 1 l
 
 doStrFun :: (T.Text -> T.Text) -> [HiValue] -> Either HiError HiValue
 doStrFun f [HiValueString s] = return $ HiValueString $ f s
 doStrFun _ l = arityErr 1 l
+
+doReverse :: [HiValue] -> Either HiError HiValue
+doReverse t@[HiValueString s] = doStrFun T.reverse t
+doReverse [HiValueList l] = return $ HiValueList $ Data.Sequence.reverse l
+doReverse l = arityErr 1 l
+
+-- doSemiFun :: (forall x. (Semigroup x) => x -> x) -> [HiValue] -> Either HiError HiValue
+-- doSemiFun f [HiValueString s] = return $ HiValueString $ f s
+-- doSemiFun f [HiValueList s] = return $ HiValueList $ f s
+-- doSemiFun _ l = arityErr 1 l
 
 arityErr :: Int -> [HiValue] -> Either HiError HiValue
 arityErr x l = if length l /= x then Left HiErrorArityMismatch else Left HiErrorInvalidArgument
@@ -116,16 +171,21 @@ doIf l = arityErr 3 l
 doPlus :: [HiValue] -> Either HiError HiValue
 doPlus [HiValueNumber a, HiValueNumber b] = return $ HiValueNumber (a + b)
 doPlus [HiValueString a, HiValueString b] = return $ HiValueString (T.append a b)
+doPlus [HiValueList a, HiValueList b] = return $ HiValueList (a >< b)
 doPlus l = arityErr 2 l
 
 isInt :: Rational -> Bool
 isInt x = denominator x == 1
 
+semiMul :: Semigroup t => (t -> HiValue) -> t -> Rational -> Either HiError HiValue
+semiMul f a b
+  | b <= 0 = Left HiErrorInvalidArgument
+  | otherwise = safeToInt b >>= \x -> return $ f (stimes x a)
+
 doMul :: [HiValue] -> Either HiError HiValue
 doMul [HiValueNumber a, HiValueNumber b] = return $ HiValueNumber (a * b)
-doMul [HiValueString a, HiValueNumber b]
-  | b <= 0 = Left HiErrorInvalidArgument
-  | otherwise = safeToInt b >>= \x -> return $ HiValueString (stimes x a)
+doMul [HiValueString a, HiValueNumber b] = semiMul HiValueString a b
+doMul [HiValueList a, HiValueNumber b] = semiMul HiValueList a b
 doMul l = arityErr 2 l
 
 doSub :: [HiValue] -> Either HiError HiValue
