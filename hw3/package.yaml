@@ -20,8 +20,9 @@ dependencies:
 
 library:
   source-dirs: src
+  ghc-options:
+  - -Wall
   dependencies:
-  - haskeline
   - megaparsec
   - prettyprinter
   - prettyprinter-ansi-terminal
@@ -46,13 +47,7 @@ executables:
     - -threaded
     - -rtsopts
     - -with-rtsopts=-N
+    - -Wall
     dependencies:
     - hw3
     - haskeline
-    - megaparsec
-    - prettyprinter
-    - prettyprinter-ansi-terminal
-    - text
-    - transformers
-    - containers
-    - optparse-applicative
