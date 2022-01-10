@@ -10,6 +10,9 @@ import qualified Data.Char
 import qualified Text.Megaparsec.Char.Lexer as L
 import Data.Functor (void)
 import Control.Monad.Combinators.Expr (Operator (..), makeExprParser)
+import Data.Word (Word8)
+import Data.ByteString (pack, ByteString)
+import qualified Data.Char as Char
 
 type Parser = Parsec Void String
 
@@ -42,7 +45,15 @@ pFun = choice
   , HiFunTrim    <$ symbol "trim"
   , HiFunList  <$ symbol "list"
   , HiFunRange <$ symbol "range"
-  , HiFunFold  <$ symbol "fold" ]
+  , HiFunFold  <$ symbol "fold"
+  , HiFunPackBytes   <$ symbol "pack-bytes"
+  , HiFunUnpackBytes <$ symbol "unpack-bytes"
+  , HiFunEncodeUtf8  <$ symbol "encode-utf8"
+  , HiFunDecodeUtf8  <$ symbol "decode-utf8"
+  , HiFunZip         <$ symbol "zip"
+  , HiFunUnzip       <$ symbol "unzip"
+  , HiFunSerialise   <$ symbol "serialise"
+  , HiFunDeserialise <$ symbol "deserialise" ]
 
 consBinOp :: HiFun -> HiExpr -> HiExpr -> HiExpr
 consBinOp c a b = HiExprApply (HiExprValue $ HiValueFunction c) [a, b]
@@ -92,7 +103,7 @@ pAppl fun = do
 
 pExpr :: Parser HiExpr
 pExpr = do
-    fun <- parens pOp <|> pList <|> HiExprValue <$> pValue
+    fun <- parens pOp <|> try pList <|> HiExprValue <$> pValue
     try $ pAppl fun <|> return fun
 
 pValue :: Parser HiValue
@@ -101,14 +112,28 @@ pValue = try (HiValueFunction <$> pFun)
   <|> (HiValueNumber <$> pNum)
   <|> (HiValueNull <$ symbol "null")
   <|> (HiValueString <$> pStr)
+  <|> (HiValueBytes <$> pBs)
 
 pStr :: Parser Text
-pStr = pack <$> (char '"' *> manyTill L.charLiteral (symbol "\""))
+pStr = Data.Text.pack <$> (char '"' *> manyTill L.charLiteral (symbol "\""))
 
 -- | Parses into `list ( PARAMS )`
 pList :: Parser HiExpr
 pList = HiExprApply (HiExprValue (HiValueFunction HiFunList))
   <$> between (symbol "[") (symbol "]") pParamList
+
+pBs :: Parser ByteString
+pBs = Data.ByteString.pack <$> between (symbol "[#") (symbol "#]") pBytes
+
+pBytes :: Parser [Word8]
+pBytes = try $ lexeme $ do
+    h <- hexDigitChar
+    l <- hexDigitChar
+    tl <- (space1 >> pBytes) <|> return []
+    return $ b h l : tl
+  <|> return []
+  where
+    b h l = fromIntegral (Char.digitToInt h * 16 + Char.digitToInt l)
 
 pNum :: Parser Rational
 pNum = lexeme $ toRational <$> L.signed space L.scientific

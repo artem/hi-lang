@@ -8,6 +8,16 @@ import Data.Semigroup (stimes)
 import Data.Ratio (denominator, numerator)
 import Data.Sequence (fromList, Seq (..), (><), reverse, lookup, take, drop)
 import Data.Maybe (fromMaybe)
+import Data.Text.Encoding (decodeUtf8', encodeUtf8)
+import Control.Applicative ((<|>))
+import Data.Either (fromRight)
+import Data.Functor ((<&>))
+import Data.ByteString (pack, unpack, append)
+import Data.Word (Word8)
+import Data.Foldable (toList)
+import Codec.Compression.Zlib (compressWith, bestCompression, CompressParams (compressLevel), defaultCompressParams, decompress)
+import Data.ByteString.Lazy (fromStrict, toStrict)
+import Codec.Serialise (serialise, deserialise)
 
 eval :: Monad m => HiExpr -> m (Either HiError HiValue)
 eval = return . evalInEitherMonad
@@ -43,9 +53,48 @@ apply (HiValueFunction fun) = case fun of
    HiFunList -> doList
    HiFunRange -> doRange
    HiFunFold -> doInitFold
+   HiFunPackBytes -> doPack
+   HiFunUnpackBytes -> doUnpack
+   HiFunEncodeUtf8 -> doEnUtf8
+   HiFunDecodeUtf8 -> doDeUtf8
+   HiFunZip -> doZip
+   HiFunUnzip -> doUnzip
+   HiFunSerialise -> doSerialise
+   HiFunDeserialise -> doDeserialise
 apply (HiValueString s) = applyStr s
 apply (HiValueList l) = applyList l
 apply _ = const $ Left HiErrorInvalidFunction
+
+doDeserialise :: [HiValue] -> Either HiError HiValue
+doDeserialise [HiValueBytes a] = return $ deserialise $ fromStrict a
+doDeserialise l = arityErr 1 l
+
+doSerialise :: [HiValue] -> Either HiError HiValue
+doSerialise [x] = return $ HiValueBytes $ toStrict $ serialise x
+doSerialise l = arityErr 1 l
+
+doUnzip :: [HiValue] -> Either HiError HiValue
+doUnzip [HiValueBytes a] = return $ HiValueBytes $ toStrict $ decompress (fromStrict a)
+doUnzip l = arityErr 1 l
+
+doZip :: [HiValue] -> Either HiError HiValue
+doZip [HiValueBytes a] = return $ HiValueBytes $ toStrict $ compressWith defaultCompressParams { compressLevel = bestCompression } (fromStrict a)
+doZip l = arityErr 1 l
+
+doUnpack :: [HiValue] -> Either HiError HiValue
+doUnpack [HiValueBytes a] = return $ HiValueList $ fromList $ map (HiValueNumber . toRational) $ unpack a
+doUnpack l = arityErr 1 l
+
+doPack :: [HiValue] -> Either HiError HiValue
+doPack [HiValueList l] = mapM intsToWord8s l <&> HiValueBytes . pack . toList
+doPack l = arityErr 1 l
+
+intsToWord8s :: HiValue -> Either HiError Word8
+intsToWord8s (HiValueNumber x) = safeToInt x >>= \n ->
+    if n < 256
+    then return $ fromIntegral n
+    else Left HiErrorInvalidArgument
+intsToWord8s _ = Left HiErrorInvalidArgument
 
 applyBin :: HiValue -> HiValue -> HiValue -> Either HiError HiValue
 applyBin f x y = apply f [x, y]
@@ -135,6 +184,14 @@ doStrFun :: (T.Text -> T.Text) -> [HiValue] -> Either HiError HiValue
 doStrFun f [HiValueString s] = return $ HiValueString $ f s
 doStrFun _ l = arityErr 1 l
 
+doDeUtf8 :: [HiValue] -> Either HiError HiValue
+doDeUtf8 [HiValueBytes a] = return $ fromRight HiValueNull (decodeUtf8' a <&> HiValueString)
+doDeUtf8 l = arityErr 1 l
+
+doEnUtf8 :: [HiValue] -> Either HiError HiValue
+doEnUtf8 [HiValueString s] = return $ HiValueBytes $ encodeUtf8 s
+doEnUtf8 l = arityErr 1 l
+
 doReverse :: [HiValue] -> Either HiError HiValue
 doReverse t@[HiValueString s] = doStrFun T.reverse t
 doReverse [HiValueList l] = return $ HiValueList $ Data.Sequence.reverse l
@@ -172,6 +229,7 @@ doPlus :: [HiValue] -> Either HiError HiValue
 doPlus [HiValueNumber a, HiValueNumber b] = return $ HiValueNumber (a + b)
 doPlus [HiValueString a, HiValueString b] = return $ HiValueString (T.append a b)
 doPlus [HiValueList a, HiValueList b] = return $ HiValueList (a >< b)
+doPlus [HiValueBytes a, HiValueBytes b] = return $ HiValueBytes (append a b)
 doPlus l = arityErr 2 l
 
 isInt :: Rational -> Bool
@@ -186,6 +244,7 @@ doMul :: [HiValue] -> Either HiError HiValue
 doMul [HiValueNumber a, HiValueNumber b] = return $ HiValueNumber (a * b)
 doMul [HiValueString a, HiValueNumber b] = semiMul HiValueString a b
 doMul [HiValueList a, HiValueNumber b] = semiMul HiValueList a b
+doMul [HiValueBytes a, HiValueNumber b] = semiMul HiValueBytes a b
 doMul l = arityErr 2 l
 
 doSub :: [HiValue] -> Either HiError HiValue

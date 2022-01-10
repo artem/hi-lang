@@ -1,6 +1,11 @@
+{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DeriveAnyClass #-}
 module HW3.Base where
 import Data.Text ( Text )
 import Data.Sequence (Seq)
+import Data.ByteString (ByteString)
+import GHC.Generics (Generic)
+import Codec.Serialise (Serialise)
 
 data HiFun =
     HiFunDiv
@@ -25,7 +30,15 @@ data HiFun =
   | HiFunList
   | HiFunRange
   | HiFunFold
-  deriving (Eq, Ord, Show)
+  | HiFunPackBytes
+  | HiFunUnpackBytes
+  | HiFunEncodeUtf8
+  | HiFunDecodeUtf8
+  | HiFunZip
+  | HiFunUnzip
+  | HiFunSerialise
+  | HiFunDeserialise
+  deriving (Eq, Ord, Show, Generic, Serialise)
 
 data HiValue =
     HiValueBool Bool
@@ -34,7 +47,8 @@ data HiValue =
   | HiValueNull
   | HiValueString Text
   | HiValueList (Seq HiValue)
-  deriving (Eq, Ord, Show)
+  | HiValueBytes ByteString
+  deriving (Eq, Ord, Show, Generic, Serialise)
 
 data HiExpr =
     HiExprValue HiValue
