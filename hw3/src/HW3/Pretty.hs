@@ -14,13 +14,13 @@ import Data.Time (UTCTime)
 import Data.Map.Strict (Map, assocs)
 import Data.Ratio (numerator)
 import GHC.Real (denominator, Ratio ((:%)))
-import Data.Scientific (fromRationalRepetendUnlimited)
+import Data.Scientific (fromRationalRepetendUnlimited, formatScientific, FPFormat (Fixed))
 import Data.Maybe (isNothing)
 
 instance Pretty Rational where
   pretty x
     | denominator x == 1 = pretty $ numerator x
-    | isNothing period = pretty $ show conv
+    | isNothing period = pretty $ formatScientific Fixed Nothing conv
     | abs num < denom = fold [pretty num, pretty "/", pretty denom]
     | otherwise = fold [pretty q, pretty $ if num > 0 then " + " else " - ", pretty (abs r), pretty "/", pretty denom]
     where
@@ -79,7 +79,7 @@ strHelper f x = fold [pretty f, pretty "(", pretty $ show x, pretty ")"]
 
 instance Pretty HiAction where
   pretty (HiActionRead  x) = strHelper HiFunRead x
-  pretty (HiActionWrite x y) = fold [pretty HiFunWrite, pretty "(", pretty $ show x, pretty ", ", pretty $ show y, pretty ")"]
+  pretty (HiActionWrite x y) = fold [pretty HiFunWrite, pretty "(", pretty $ show x, pretty ", ", pretty y, pretty ")"]
   pretty (HiActionMkDir x) = strHelper HiFunMkDir x
   pretty (HiActionChDir x) = strHelper HiFunChDir x
   pretty HiActionCwd = pretty "cwd"

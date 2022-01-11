@@ -78,7 +78,7 @@ data HiError =
   | HiErrorInvalidFunction
   | HiErrorArityMismatch
   | HiErrorDivideByZero
-  deriving (Show)
+  deriving (Eq, Show)
 
 data HiAction =
     HiActionRead  FilePath

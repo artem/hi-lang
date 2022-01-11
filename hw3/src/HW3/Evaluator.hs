@@ -11,7 +11,7 @@ import Data.Maybe (fromMaybe)
 import Data.Text.Encoding (decodeUtf8', encodeUtf8)
 import Data.Either (fromRight)
 import Data.Functor ((<&>))
-import Data.ByteString (pack, unpack, append)
+import Data.ByteString (pack, unpack, append, ByteString)
 import Data.Word (Word8)
 import Data.Foldable (toList, Foldable (foldl'))
 import Codec.Compression.Zlib (compressWith, bestCompression, CompressParams (compressLevel), defaultCompressParams, decompress)
@@ -22,7 +22,6 @@ import Data.Time (addUTCTime, diffUTCTime)
 import Data.Map.Strict (fromList, Map, lookup, empty, lookupMin, deleteMin, insert, elems, keys, adjust, member)
 import Control.Monad.Trans.Except (runExceptT, ExceptT, throwE)
 import Control.Monad.Trans.Class (lift)
-import Data.Text (singleton)
 
 eval :: HiMonad m => HiExpr -> m (Either HiError HiValue)
 eval expr = runExceptT (eval' expr)
@@ -113,13 +112,14 @@ apply (HiValueFunction fun) = case fun of
    _ -> const $ Left HiErrorInvalidFunction
 apply (HiValueString s) = applyStr s
 apply (HiValueList l) = applyList l
+apply (HiValueBytes b) = applyList $ unpackHelper b
 apply (HiValueDict m) = applyMap m
 apply _ = const $ Left HiErrorInvalidFunction
 
 doCount :: [HiValue] -> Either HiError HiValue
 doCount [HiValueBytes bytes] = return $ HiValueDict $ countHelper (HiValueNumber . fromIntegral) (unpack bytes)
 doCount [HiValueList l] = return $ HiValueDict $ countHelper id l
-doCount [HiValueString s] = return $ HiValueDict $ countHelper (HiValueString . singleton) (T.unpack s)
+doCount [HiValueString s] = return $ HiValueDict $ countHelper (HiValueString . T.singleton) (T.unpack s)
 doCount l = arityErr 1 l
 
 countHelper :: Foldable t1 => (t2 -> HiValue) -> t1 t2 -> Map HiValue HiValue
@@ -180,7 +180,8 @@ doSingleAction _ l = arityErr 1 l
 
 doWrite :: [HiValue] -> Either HiError HiValue
 doWrite [HiValueString x, HiValueString y] = return $ HiValueAction $ HiActionWrite (T.unpack x) (encodeUtf8 y)
-doWrite l = arityErr 1 l
+doWrite [HiValueString x, HiValueBytes y] = return $ HiValueAction $ HiActionWrite (T.unpack x) y
+doWrite l = arityErr 2 l
 
 doDeserialise :: [HiValue] -> Either HiError HiValue
 doDeserialise [HiValueBytes a] = return $ deserialise $ fromStrict a
@@ -198,8 +199,11 @@ doZip :: [HiValue] -> Either HiError HiValue
 doZip [HiValueBytes a] = return $ HiValueBytes $ toStrict $ compressWith defaultCompressParams { compressLevel = bestCompression } (fromStrict a)
 doZip l = arityErr 1 l
 
+unpackHelper :: ByteString -> Seq HiValue
+unpackHelper a = Data.Sequence.fromList $ map (HiValueNumber . toRational) $ unpack a
+
 doUnpack :: [HiValue] -> Either HiError HiValue
-doUnpack [HiValueBytes a] = return $ HiValueList $ Data.Sequence.fromList $ map (HiValueNumber . toRational) $ unpack a
+doUnpack [HiValueBytes a] = return $ HiValueList $ unpackHelper a
 doUnpack l = arityErr 1 l
 
 doPack :: [HiValue] -> Either HiError HiValue
@@ -208,7 +212,7 @@ doPack l = arityErr 1 l
 
 intsToWord8s :: HiValue -> Either HiError Word8
 intsToWord8s (HiValueNumber x) = safeToInt x >>= \n ->
-    if n < 256
+    if n < 256 && n > 0
     then return $ fromIntegral n
     else Left HiErrorInvalidArgument
 intsToWord8s _ = Left HiErrorInvalidArgument
@@ -218,6 +222,8 @@ applyBin f x y = apply f [x, y]
 
 doInitFold :: [HiValue] -> Either HiError HiValue
 doInitFold [f, HiValueList (x :<| (y :<| rest))] = apply f [x, y] >>= \acc -> foldM (applyBin f) acc rest
+doInitFold [_, HiValueList (y :<| _)] = return y
+doInitFold [_, HiValueList _] = return HiValueNull
 doInitFold l = arityErr 2 l
 
 doList :: [HiValue] -> Either HiError HiValue

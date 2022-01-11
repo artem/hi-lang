@@ -54,14 +54,16 @@ instance HiMonad HIO where
 
 doReadFile :: FilePath -> IO HiValue
 doReadFile path = do
-  chk <- doesDirectoryExist path
-  if not chk then do
+  chkDir <- doesDirectoryExist path
+  chkFile <- doesFileExist path
+  if chkDir then do
+    lst <- listDirectory path
+    let lst' = fromList $ map (HiValueString . Data.Text.pack) lst
+    return $ HiValueList lst'
+  else if chkFile then do
     bytes <- readFile path
     let txt = decodeUtf8' bytes
     return $ case txt of
       Left _ -> HiValueBytes bytes
       Right x -> HiValueString x
-  else do
-    lst <- getDirectoryContents path
-    let lst' = fromList $ map (HiValueString . Data.Text.pack) lst
-    return $ HiValueList lst'
+  else return HiValueNull

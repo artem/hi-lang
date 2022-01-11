@@ -73,14 +73,17 @@ pFun = choice
 consBinOp :: HiFun -> HiExpr -> HiExpr -> HiExpr
 consBinOp c a b = HiExprApply (HiExprValue $ HiValueFunction c) [a, b]
 
+noEq :: String -> Parser String
+noEq x = lexeme $ try $ string x <* notFollowedBy (char '=')
+
 operators :: [[Operator Parser HiExpr]]
 operators =
-  [ [ InfixL (consBinOp HiFunDiv <$ (lexeme . try) (string "/" <* notFollowedBy (char '=')))
+  [ [ InfixL (consBinOp HiFunDiv <$ noEq "/")
     , InfixL (consBinOp HiFunMul <$ symbol "*") ]
   , [ InfixL (consBinOp HiFunAdd <$ symbol "+")
     , InfixL (consBinOp HiFunSub <$ symbol "-") ]
-  , [ InfixN (consBinOp HiFunLessThan       <$ symbol "<")
-    , InfixN (consBinOp HiFunGreaterThan    <$ symbol ">")
+  , [ InfixN (consBinOp HiFunLessThan       <$ noEq "<")
+    , InfixN (consBinOp HiFunGreaterThan    <$ noEq ">")
     , InfixN (consBinOp HiFunNotLessThan    <$ symbol ">=")
     , InfixN (consBinOp HiFunNotGreaterThan <$ symbol "<=")
     , InfixN (consBinOp HiFunEquals         <$ symbol "==")
