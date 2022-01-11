@@ -17,6 +17,8 @@ import Data.Foldable (toList)
 import Codec.Compression.Zlib (compressWith, bestCompression, CompressParams (compressLevel), defaultCompressParams, decompress)
 import Data.ByteString.Lazy (fromStrict, toStrict)
 import Codec.Serialise (serialise, deserialise)
+import Text.Read (readMaybe)
+import Data.Time (addUTCTime, diffUTCTime)
 
 eval :: HiMonad m => HiExpr -> m (Either HiError HiValue)
 eval (HiExprRun x) = do
@@ -75,9 +77,14 @@ apply (HiValueFunction fun) = case fun of
    HiFunWrite -> doWrite
    HiFunMkDir -> doSingleAction HiActionMkDir
    HiFunChDir -> doSingleAction HiActionChDir
+   HiFunParseTime -> doParseTime
 apply (HiValueString s) = applyStr s
 apply (HiValueList l) = applyList l
 apply _ = const $ Left HiErrorInvalidFunction
+
+doParseTime :: [HiValue] -> Either HiError HiValue
+doParseTime [HiValueString x] = return $ maybe HiValueNull HiValueTime (readMaybe (T.unpack x))
+doParseTime l = arityErr 1 l
 
 doSingleAction :: (String -> HiAction) -> [HiValue] -> Either HiError HiValue
 doSingleAction f [HiValueString x] = return $ HiValueAction $ f (T.unpack x)
@@ -252,6 +259,7 @@ doPlus [HiValueNumber a, HiValueNumber b] = return $ HiValueNumber (a + b)
 doPlus [HiValueString a, HiValueString b] = return $ HiValueString (T.append a b)
 doPlus [HiValueList a, HiValueList b] = return $ HiValueList (a >< b)
 doPlus [HiValueBytes a, HiValueBytes b] = return $ HiValueBytes (append a b)
+doPlus [HiValueTime a, HiValueNumber b] = return $ HiValueTime (addUTCTime (fromRational b) a)
 doPlus l = arityErr 2 l
 
 isInt :: Rational -> Bool
@@ -271,6 +279,7 @@ doMul l = arityErr 2 l
 
 doSub :: [HiValue] -> Either HiError HiValue
 doSub [HiValueNumber a, HiValueNumber b] = return $ HiValueNumber (a - b)
+doSub [HiValueTime a, HiValueTime b] = return $ HiValueNumber $ toRational (diffUTCTime a b)
 doSub l = arityErr 2 l
 
 doDiv :: [HiValue] -> Either HiError HiValue

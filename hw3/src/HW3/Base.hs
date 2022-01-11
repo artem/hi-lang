@@ -6,6 +6,7 @@ import Data.Sequence (Seq)
 import Data.ByteString (ByteString)
 import GHC.Generics (Generic)
 import Codec.Serialise (Serialise)
+import Data.Time (UTCTime)
 
 data HiFun =
     HiFunDiv
@@ -42,6 +43,7 @@ data HiFun =
   | HiFunWrite
   | HiFunMkDir
   | HiFunChDir
+  | HiFunParseTime
   deriving (Eq, Ord, Show, Generic, Serialise)
 
 data HiValue =
@@ -53,6 +55,7 @@ data HiValue =
   | HiValueList (Seq HiValue)
   | HiValueBytes ByteString
   | HiValueAction HiAction
+  | HiValueTime UTCTime
   deriving (Eq, Ord, Show, Generic, Serialise)
 
 data HiExpr =
@@ -74,6 +77,7 @@ data HiAction =
   | HiActionMkDir FilePath
   | HiActionChDir FilePath
   | HiActionCwd
+  | HiActionNow
   deriving (Eq, Ord, Show, Generic, Serialise)
 
 class Monad m => HiMonad m where

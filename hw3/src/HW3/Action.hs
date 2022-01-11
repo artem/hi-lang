@@ -11,10 +11,12 @@ import Data.ByteString (writeFile, readFile)
 import Prelude hiding (readFile, writeFile)
 import Data.Text.Encoding (decodeUtf8')
 import Data.Sequence (fromList)
+import Data.Time (getCurrentTime)
 
 data HiPermission =
     AllowRead
   | AllowWrite
+  | AllowTime
   deriving (Eq, Ord, Show)
 
 data PermissionException =
@@ -45,6 +47,7 @@ instance HiMonad HIO where
   runAction (HiActionRead x) = verifyAndRun AllowRead (doReadFile x)
   runAction (HiActionWrite x y) = verifyAndRun AllowWrite (HiValueNull <$ writeFile x y)
   runAction (HiActionMkDir x) = verifyAndRun AllowWrite (HiValueNull <$ createDirectory x)
+  runAction HiActionNow = verifyAndRun AllowTime (HiValueTime <$> getCurrentTime)
 
 doReadFile :: FilePath -> IO HiValue
 doReadFile path = do

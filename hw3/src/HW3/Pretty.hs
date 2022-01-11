@@ -10,8 +10,11 @@ import Data.Foldable (toList, Foldable (fold))
 import Data.ByteString (ByteString, unpack)
 import Text.Printf (printf)
 import Data.Word (Word8)
+import Data.Time (UTCTime)
 
 instance Pretty Rational where pretty = unsafeViaShow
+
+instance Pretty UTCTime where pretty = unsafeViaShow
 
 instance Pretty HiFun where
   pretty x = pretty $ case x of
@@ -49,6 +52,7 @@ instance Pretty HiFun where
     HiFunWrite -> "write"
     HiFunMkDir -> "mkdir"
     HiFunChDir -> "cd"
+    HiFunParseTime -> "parse-time"
 
 instance Pretty HiAction where
   pretty (HiActionRead  x) = fold [pretty HiFunMkDir, pretty "(", pretty $ show x, pretty ")"]
@@ -56,6 +60,7 @@ instance Pretty HiAction where
   pretty (HiActionMkDir x) = fold [pretty HiFunMkDir, pretty "(", pretty $ show x, pretty ")"]
   pretty (HiActionChDir x) = fold [pretty HiFunChDir, pretty "(", pretty $ show x, pretty ")"]
   pretty HiActionCwd = pretty "cwd"
+  pretty HiActionNow = pretty "now"
 
 instance Pretty a => Pretty (Seq a) where
   pretty = pretty . toList
@@ -75,6 +80,7 @@ instance Pretty HiValue where
   pretty (HiValueList x) = pretty x
   pretty (HiValueBytes x) = pretty x
   pretty (HiValueAction x) = pretty x
+  pretty (HiValueTime x) = fold [pretty HiFunParseTime, pretty "(\"", pretty x, pretty "\")"]
 
 prettyValue :: HiValue -> Doc AnsiStyle
 prettyValue = pretty
