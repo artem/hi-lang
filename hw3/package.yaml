@@ -51,3 +51,4 @@ executables:
     dependencies:
     - hw3
     - haskeline
+    - containers
