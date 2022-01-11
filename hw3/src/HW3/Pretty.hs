@@ -2,11 +2,11 @@
 {-# OPTIONS_GHC -Wno-orphans #-}
 
 module HW3.Pretty where
-import HW3.Base (HiValue (..), HiFun (..))
+import HW3.Base (HiValue (..), HiFun (..), HiAction (..))
 import Prettyprinter
 import Prettyprinter.Render.Terminal
 import Data.Sequence (Seq)
-import Data.Foldable (toList)
+import Data.Foldable (toList, Foldable (fold))
 import Data.ByteString (ByteString, unpack)
 import Text.Printf (printf)
 import Data.Word (Word8)
@@ -45,6 +45,17 @@ instance Pretty HiFun where
     HiFunUnzip -> "unzip"
     HiFunSerialise -> "serialise"
     HiFunDeserialise -> "deserialise"
+    HiFunRead  -> "read"
+    HiFunWrite -> "write"
+    HiFunMkDir -> "mkdir"
+    HiFunChDir -> "cd"
+
+instance Pretty HiAction where
+  pretty (HiActionRead  x) = fold [pretty HiFunMkDir, pretty "(", pretty $ show x, pretty ")"]
+  pretty (HiActionWrite x y) = fold [pretty HiFunWrite, pretty "(", pretty $ show x, pretty ", ", pretty $ show y, pretty ")"]
+  pretty (HiActionMkDir x) = fold [pretty HiFunMkDir, pretty "(", pretty $ show x, pretty ")"]
+  pretty (HiActionChDir x) = fold [pretty HiFunChDir, pretty "(", pretty $ show x, pretty ")"]
+  pretty HiActionCwd = pretty "cwd"
 
 instance Pretty a => Pretty (Seq a) where
   pretty = pretty . toList
@@ -58,11 +69,12 @@ instance Pretty ByteString where
 instance Pretty HiValue where
   pretty (HiValueNumber x) = pretty x
   pretty (HiValueFunction x) = pretty x
-  pretty (HiValueBool x) = pretty x
+  pretty (HiValueBool x) = if x then pretty "true" else pretty "false"
   pretty HiValueNull = pretty "null"
-  pretty (HiValueString x) = pretty x
+  pretty (HiValueString x) = pretty $ show x
   pretty (HiValueList x) = pretty x
   pretty (HiValueBytes x) = pretty x
+  pretty (HiValueAction x) = pretty x
 
 prettyValue :: HiValue -> Doc AnsiStyle
 prettyValue = pretty
