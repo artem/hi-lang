@@ -120,7 +120,7 @@ pPostfix cur = try (pAppl cur) <|> pExec cur <|> pProp cur <|> return cur
 
 pProp :: HiExpr -> Parser HiExpr
 pProp fun = do
-    void (symbol ".")
+    void (char '.')
     key <- lexeme $ ((:) <$> satisfy isAlpha <*> many (satisfy isAlphaNum)) `sepBy1` char '-'
     let arg = HiExprValue $ HiValueString $ Data.Text.pack $ intercalate "-" key
     pPostfix (HiExprApply fun [arg])
