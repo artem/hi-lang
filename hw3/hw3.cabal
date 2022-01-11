@@ -61,4 +61,5 @@ executable hi
     , containers
     , haskeline
     , hw3
+    , megaparsec
   default-language: Haskell2010

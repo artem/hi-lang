@@ -7,6 +7,7 @@ import HW3.Pretty
 import Control.Monad.IO.Class (liftIO)
 import HW3.Action (runHIO, HiPermission (..))
 import Data.Set (fromList)
+import Text.Megaparsec (errorBundlePretty)
 
 main :: IO ()
 main = runInputT defaultSettings loop
@@ -24,5 +25,5 @@ main = runInputT defaultSettings loop
                                         case v of
                                             Right y -> outputStrLn $ show (prettyValue y)
                                             Left y -> outputStrLn $ show y
-                                    Left x -> outputStrLn $ show x
+                                    Left x -> outputStrLn $ errorBundlePretty x
                                 loop
