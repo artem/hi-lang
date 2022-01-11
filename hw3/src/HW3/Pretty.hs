@@ -54,15 +54,20 @@ instance Pretty HiFun where
     HiFunChDir -> "cd"
     HiFunParseTime -> "parse-time"
     HiFunRand -> "rand"
+    HiFunEcho -> "echo"
+
+strHelper :: (Show a) => HiFun -> a -> Doc ann
+strHelper f x = fold [pretty f, pretty "(", pretty $ show x, pretty ")"]
 
 instance Pretty HiAction where
-  pretty (HiActionRead  x) = fold [pretty HiFunMkDir, pretty "(", pretty $ show x, pretty ")"]
+  pretty (HiActionRead  x) = strHelper HiFunRead x
   pretty (HiActionWrite x y) = fold [pretty HiFunWrite, pretty "(", pretty $ show x, pretty ", ", pretty $ show y, pretty ")"]
-  pretty (HiActionMkDir x) = fold [pretty HiFunMkDir, pretty "(", pretty $ show x, pretty ")"]
-  pretty (HiActionChDir x) = fold [pretty HiFunChDir, pretty "(", pretty $ show x, pretty ")"]
+  pretty (HiActionMkDir x) = strHelper HiFunMkDir x
+  pretty (HiActionChDir x) = strHelper HiFunChDir x
   pretty HiActionCwd = pretty "cwd"
   pretty HiActionNow = pretty "now"
   pretty (HiActionRand x y) = fold [pretty HiFunRand, pretty "(", pretty x, pretty ", ", pretty y, pretty ")"]
+  pretty (HiActionEcho x) = strHelper HiFunEcho x
 
 instance Pretty a => Pretty (Seq a) where
   pretty = pretty . toList

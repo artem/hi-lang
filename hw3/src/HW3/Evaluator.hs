@@ -33,13 +33,35 @@ eval (HiExprApply fexpr args) = do
     f <- eval fexpr
     case f of
       l@(Left _) -> return l
-      Right hv -> do
+      Right hv -> evalLazy hv args
+
+evalLazy :: HiMonad m => HiValue -> [HiExpr] -> m (Either HiError HiValue)
+evalLazy (HiValueFunction HiFunIf) [x, a, b] = do
+    cond <- eval x
+    case cond of
+      l@(Left _) -> return l
+      Right (HiValueBool bcond) -> if bcond then eval a else eval b
+      _ -> return $ Left HiErrorInvalidArgument
+evalLazy (HiValueFunction HiFunAnd) [a, b] = do
+    cond <- eval a
+    case cond of
+      l@(Left _) -> return l
+      r@(Right(HiValueBool bcond)) -> if bcond then eval b else return r
+      r@(Right HiValueNull) -> return r
+      _ -> eval b
+evalLazy (HiValueFunction HiFunOr) [a, b] = do
+    cond <- eval a
+    case cond of
+      l@(Left _) -> return l
+      r@(Right(HiValueBool bcond)) -> if bcond then return r else eval b
+      Right HiValueNull -> eval b
+      x -> return x
+evalLazy hv args = do
           args' <- mapM eval args
           let args'' = sequenceA args'
           return $ case args'' of
             (Left he) -> Left he
             Right hvs -> apply hv hvs
-
 
 apply :: HiValue -> [HiValue] -> Either HiError HiValue
 apply (HiValueFunction fun) = case fun of
@@ -48,15 +70,12 @@ apply (HiValueFunction fun) = case fun of
    HiFunAdd -> doPlus
    HiFunSub -> doSub
    HiFunNot -> doNot
-   HiFunAnd -> doAnd
-   HiFunOr -> doOr
    HiFunLessThan -> doComp LT
    HiFunGreaterThan -> doComp GT
    HiFunEquals -> doComp EQ
    HiFunNotLessThan -> doComp LT >=> doNot . (:[])
    HiFunNotGreaterThan -> doComp GT >=> doNot . (:[])
    HiFunNotEquals -> doComp EQ >=> doNot . (:[])
-   HiFunIf -> doIf
    HiFunLength -> doLen
    HiFunToUpper -> doStrFun T.toUpper
    HiFunToLower -> doStrFun T.toLower
@@ -79,9 +98,15 @@ apply (HiValueFunction fun) = case fun of
    HiFunChDir -> doSingleAction HiActionChDir
    HiFunParseTime -> doParseTime
    HiFunRand -> doRand
+   HiFunEcho -> doEcho
+   _ -> const $ Left HiErrorInvalidFunction
 apply (HiValueString s) = applyStr s
 apply (HiValueList l) = applyList l
 apply _ = const $ Left HiErrorInvalidFunction
+
+doEcho :: [HiValue] -> Either HiError HiValue
+doEcho [HiValueString x] = return $ HiValueAction $ HiActionEcho x
+doEcho l = arityErr 1 l
 
 doRand :: [HiValue] -> Either HiError HiValue
 doRand [HiValueNumber a, HiValueNumber b] =
@@ -234,21 +259,8 @@ doReverse t@[HiValueString _] = doStrFun T.reverse t
 doReverse [HiValueList l] = return $ HiValueList $ Data.Sequence.reverse l
 doReverse l = arityErr 1 l
 
--- doSemiFun :: (forall x. (Semigroup x) => x -> x) -> [HiValue] -> Either HiError HiValue
--- doSemiFun f [HiValueString s] = return $ HiValueString $ f s
--- doSemiFun f [HiValueList s] = return $ HiValueList $ f s
--- doSemiFun _ l = arityErr 1 l
-
 arityErr :: Int -> [HiValue] -> Either HiError HiValue
 arityErr x l = if length l /= x then Left HiErrorArityMismatch else Left HiErrorInvalidArgument
-
-doAnd :: [HiValue] -> Either HiError HiValue
-doAnd [HiValueBool a, HiValueBool b] = return $ HiValueBool $ a && b
-doAnd l = arityErr 2 l
-
-doOr :: [HiValue] -> Either HiError HiValue
-doOr [HiValueBool a, HiValueBool b] = return $ HiValueBool $ a || b
-doOr l = arityErr 2 l
 
 doComp :: Ordering -> [HiValue] -> Either HiError HiValue
 doComp p [a, b] = return $ HiValueBool $ compare a b == p
@@ -257,10 +269,6 @@ doComp _ l = arityErr 2 l
 doNot :: [HiValue] -> Either HiError HiValue
 doNot [HiValueBool x] = return $ HiValueBool $ not x
 doNot l = arityErr 1 l
-
-doIf :: [HiValue] -> Either HiError HiValue
-doIf [HiValueBool cond, a, b] = return $ if cond then a else b
-doIf l = arityErr 3 l
 
 doPlus :: [HiValue] -> Either HiError HiValue
 doPlus [HiValueNumber a, HiValueNumber b] = return $ HiValueNumber (a + b)

@@ -6,7 +6,7 @@ import qualified Control.Monad
 import Control.Monad (liftM)
 import GHC.IO (throwIO)
 import System.Directory
-import Data.Text (pack)
+import Data.Text (pack, unpack)
 import Data.ByteString (writeFile, readFile)
 import Prelude hiding (readFile, writeFile)
 import Data.Text.Encoding (decodeUtf8')
@@ -50,6 +50,7 @@ instance HiMonad HIO where
   runAction (HiActionMkDir x) = verifyAndRun AllowWrite (HiValueNull <$ createDirectory x)
   runAction HiActionNow = verifyAndRun AllowTime (HiValueTime <$> getCurrentTime)
   runAction (HiActionRand x y) = HIO $ \_ -> HiValueNumber . toRational <$> getStdRandom (randomR (x,y))
+  runAction (HiActionEcho x) = verifyAndRun AllowWrite (HiValueNull <$ putStrLn (unpack x))
 
 doReadFile :: FilePath -> IO HiValue
 doReadFile path = do
