@@ -12,6 +12,9 @@ import Data.Word (Word8)
 import Data.ByteString (pack, ByteString)
 import qualified Data.Char as Char
 import Data.Functor (void)
+import Data.Map.Strict (Map, insert, empty)
+import Data.Char (isAlpha, isAlphaNum)
+import Data.List (intercalate)
 
 type Parser = Parsec Void String
 
@@ -59,7 +62,11 @@ pFun = choice
   , HiFunChDir <$ symbol "cd"
   , HiFunParseTime <$ symbol "parse-time"
   , HiFunRand <$ symbol "rand"
-  , HiFunEcho <$ symbol "echo" ]
+  , HiFunEcho <$ symbol "echo"
+  , HiFunCount  <$ symbol "count"
+  , HiFunKeys   <$ symbol "keys"
+  , HiFunValues <$ symbol "values"
+  , HiFunInvert <$ symbol "invert" ]
 
 consBinOp :: HiFun -> HiExpr -> HiExpr -> HiExpr
 consBinOp c a b = HiExprApply (HiExprValue $ HiValueFunction c) [a, b]
@@ -101,22 +108,28 @@ pParamList = try $ lexeme $ do
 parens :: Parser a -> Parser a
 parens = between (symbol "(") (symbol ")")
 
+pPostfix :: HiExpr -> Parser HiExpr
+pPostfix cur = try (pAppl cur) <|> pExec cur <|> pProp cur <|> return cur
+
+pProp :: HiExpr -> Parser HiExpr
+pProp fun = do
+    void (symbol ".")
+    key <- lexeme $ ((:) <$> satisfy isAlpha <*> many (satisfy isAlphaNum)) `sepBy1` char '-'
+    let arg = HiExprValue $ HiValueString $ Data.Text.pack $ intercalate "-" key
+    pPostfix (HiExprApply fun [arg])
+
 pAppl :: HiExpr -> Parser HiExpr
 pAppl fun = do
     args <- parens pParamList
-    let cur = HiExprApply fun args
-    try (pAppl cur) <|> pExec cur <|> return cur
+    pPostfix (HiExprApply fun args)
 
 pExec :: HiExpr -> Parser HiExpr
 pExec fun = do
     void (symbol "!")
-    let cur = HiExprRun fun
-    try (pAppl cur) <|> pExec cur <|> return cur
+    pPostfix (HiExprRun fun)
 
 pExpr :: Parser HiExpr
-pExpr = do
-    fun <- parens pOp <|> try pList <|> HiExprValue <$> pValue
-    try $ pAppl fun <|> pExec fun <|> return fun
+pExpr = (parens pOp <|> try pList <|> try pDict <|> HiExprValue <$> pValue) >>= pPostfix
 
 pValue :: Parser HiValue
 pValue = try (HiValueFunction <$> pFun)
@@ -127,6 +140,18 @@ pValue = try (HiValueFunction <$> pFun)
   <|> (HiValueNumber <$> pNum)
   <|> (HiValueString <$> pStr)
   <|> (HiValueBytes <$> pBs)
+
+pDict :: Parser HiExpr
+pDict = HiExprDict <$> between (symbol "{") (symbol "}") pMapPairs
+
+pMapPairs :: Parser [(HiExpr, HiExpr)]
+pMapPairs = try $ lexeme $ do
+    ff <- pOp
+    void (symbol ":")
+    kk <- pOp
+    tl <- try (symbol "," >> pMapPairs) <|> return [] -- TODO bad parsing
+    return $ (ff, kk) : tl
+  <|> return []
 
 pStr :: Parser Text
 pStr = Data.Text.pack <$> (char '"' *> manyTill L.charLiteral (symbol "\""))

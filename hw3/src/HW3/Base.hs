@@ -7,6 +7,7 @@ import Data.ByteString (ByteString)
 import GHC.Generics (Generic)
 import Codec.Serialise (Serialise)
 import Data.Time (UTCTime)
+import Data.Map.Strict (Map)
 
 data HiFun =
     HiFunDiv
@@ -46,6 +47,10 @@ data HiFun =
   | HiFunParseTime
   | HiFunRand
   | HiFunEcho
+  | HiFunCount
+  | HiFunKeys
+  | HiFunValues
+  | HiFunInvert
   deriving (Eq, Ord, Show, Generic, Serialise)
 
 data HiValue =
@@ -58,12 +63,14 @@ data HiValue =
   | HiValueBytes ByteString
   | HiValueAction HiAction
   | HiValueTime UTCTime
+  | HiValueDict (Map HiValue HiValue)
   deriving (Eq, Ord, Show, Generic, Serialise)
 
 data HiExpr =
     HiExprValue HiValue
   | HiExprApply HiExpr [HiExpr]
   | HiExprRun HiExpr
+  | HiExprDict [(HiExpr, HiExpr)]
   deriving (Eq, Ord, Show)
 
 data HiError =

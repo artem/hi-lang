@@ -37,7 +37,6 @@ library
     , containers
     , directory
     , megaparsec
-    , optparse-applicative
     , parser-combinators
     , prettyprinter
     , prettyprinter-ansi-terminal

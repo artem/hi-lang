@@ -11,6 +11,7 @@ import Data.ByteString (ByteString, unpack)
 import Text.Printf (printf)
 import Data.Word (Word8)
 import Data.Time (UTCTime)
+import Data.Map.Strict (Map, assocs)
 
 instance Pretty Rational where pretty = unsafeViaShow
 
@@ -55,6 +56,10 @@ instance Pretty HiFun where
     HiFunParseTime -> "parse-time"
     HiFunRand -> "rand"
     HiFunEcho -> "echo"
+    HiFunCount -> "count"
+    HiFunKeys -> "keys"
+    HiFunValues -> "values"
+    HiFunInvert -> "invert"
 
 strHelper :: (Show a) => HiFun -> a -> Doc ann
 strHelper f x = fold [pretty f, pretty "(", pretty $ show x, pretty ")"]
@@ -72,11 +77,17 @@ instance Pretty HiAction where
 instance Pretty a => Pretty (Seq a) where
   pretty = pretty . toList
 
+listPretty :: Pretty a1 => String -> String -> a1 -> (a2 -> Doc ann) -> [a2] -> Doc ann
+listPretty l r s f = align . blist . map f where
+  blist = group . encloseSep (flatAlt (pretty (l ++ " ")) (pretty l))
+                             (flatAlt (pretty (' ' : r)) (pretty r))
+                             (pretty s)
+
 instance Pretty ByteString where
-  pretty x = (align . blist . map (pretty . (printf "%02x" :: (Word8 -> String)))) $ unpack x where
-    blist = group . encloseSep (flatAlt (pretty "[# ") (pretty "[#"))
-                          (flatAlt (pretty " #]") (pretty "#]"))
-                          (pretty " ")
+  pretty x = listPretty "[#" "#]" " " (pretty . (printf "%02x" :: (Word8 -> String))) $ unpack x
+
+instance Pretty a => Pretty (Map a a) where
+  pretty x = listPretty "{" "}" ", " (\(a, b) -> pretty a <> pretty ": " <> pretty b) $ assocs x
 
 instance Pretty HiValue where
   pretty (HiValueNumber x) = pretty x
@@ -88,6 +99,7 @@ instance Pretty HiValue where
   pretty (HiValueBytes x) = pretty x
   pretty (HiValueAction x) = pretty x
   pretty (HiValueTime x) = fold [pretty HiFunParseTime, pretty "(\"", pretty x, pretty "\")"]
+  pretty (HiValueDict x) = pretty x
 
 prettyValue :: HiValue -> Doc AnsiStyle
 prettyValue = pretty

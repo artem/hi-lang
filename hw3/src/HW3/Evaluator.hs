@@ -19,6 +19,7 @@ import Data.ByteString.Lazy (fromStrict, toStrict)
 import Codec.Serialise (serialise, deserialise)
 import Text.Read (readMaybe)
 import Data.Time (addUTCTime, diffUTCTime)
+import Data.Map.Strict (fromList, Map, lookup, empty, lookupMin, deleteMin, insert, elems, keys)
 
 eval :: HiMonad m => HiExpr -> m (Either HiError HiValue)
 eval (HiExprRun x) = do
@@ -34,6 +35,23 @@ eval (HiExprApply fexpr args) = do
     case f of
       l@(Left _) -> return l
       Right hv -> evalLazy hv args
+eval (HiExprDict x) = do
+    res <- traverse pairEval x
+    let res' = sequenceA res -- TODO aaa
+    case res' of
+      (Left he) -> return $ Left he
+      Right x1 -> return $ return $ HiValueDict $ Data.Map.Strict.fromList x1
+
+pairEval :: HiMonad m => (HiExpr, HiExpr) -> m (Either HiError (HiValue, HiValue))
+pairEval (a, b) = do
+    x1 <- eval a
+    case x1 of
+      (Left he) -> return $ Left he
+      Right hv -> do
+          x2 <- eval b
+          case x2 of
+            (Left he) -> return $ Left he
+            Right hv' -> return $ return (hv, hv')
 
 evalLazy :: HiMonad m => HiValue -> [HiExpr] -> m (Either HiError HiValue)
 evalLazy (HiValueFunction HiFunIf) [x, a, b] = do
@@ -58,7 +76,7 @@ evalLazy (HiValueFunction HiFunOr) [a, b] = do
       x -> return x
 evalLazy hv args = do
           args' <- mapM eval args
-          let args'' = sequenceA args'
+          let args'' = sequenceA args' -- TODO horrible
           return $ case args'' of
             (Left he) -> Left he
             Right hvs -> apply hv hvs
@@ -99,10 +117,44 @@ apply (HiValueFunction fun) = case fun of
    HiFunParseTime -> doParseTime
    HiFunRand -> doRand
    HiFunEcho -> doEcho
+   HiFunCount -> undefined
+   HiFunKeys -> doDictKeys
+   HiFunValues -> doDictValues
+   HiFunInvert -> doInvert
    _ -> const $ Left HiErrorInvalidFunction
 apply (HiValueString s) = applyStr s
 apply (HiValueList l) = applyList l
+apply (HiValueDict m) = applyMap m
 apply _ = const $ Left HiErrorInvalidFunction
+
+doDictValues :: [HiValue] -> Either HiError HiValue
+doDictValues [HiValueDict x] = return $ HiValueList $ Data.Sequence.fromList $ elems x
+doDictValues l = arityErr 1 l
+
+doDictKeys :: [HiValue] -> Either HiError HiValue
+doDictKeys [HiValueDict x] = return $ HiValueList $ Data.Sequence.fromList $ keys x
+doDictKeys l = arityErr 1 l
+
+flipAL :: (Ord key, Ord val) => Map key val -> Map val [key]
+flipAL oldl =
+    let worker :: (Ord key, Ord val) => Map key val -> Map val [key] -> Map val [key]
+        worker left accum =
+            let minElem = lookupMin left in
+                case minElem of
+                    Nothing -> accum
+                    Just (k, v) -> case Data.Map.Strict.lookup v accum of
+                                            Nothing -> worker (deleteMin left) (insert v [k] accum)
+                                            Just y  -> worker (deleteMin left) (insert v (k:y) accum)
+        in
+        worker oldl empty
+
+doInvert :: [HiValue] -> Either HiError HiValue
+doInvert [HiValueDict x] = return $ HiValueDict $ HiValueList . Data.Sequence.fromList <$> flipAL x
+doInvert l = arityErr 1 l
+
+applyMap :: Map HiValue HiValue -> [HiValue] -> Either HiError HiValue
+applyMap m [x] = return $ fromMaybe HiValueNull (Data.Map.Strict.lookup x m)
+applyMap _ l = arityErr 1 l
 
 doEcho :: [HiValue] -> Either HiError HiValue
 doEcho [HiValueString x] = return $ HiValueAction $ HiActionEcho x
@@ -144,11 +196,11 @@ doZip [HiValueBytes a] = return $ HiValueBytes $ toStrict $ compressWith default
 doZip l = arityErr 1 l
 
 doUnpack :: [HiValue] -> Either HiError HiValue
-doUnpack [HiValueBytes a] = return $ HiValueList $ fromList $ map (HiValueNumber . toRational) $ unpack a
+doUnpack [HiValueBytes a] = return $ HiValueList $ Data.Sequence.fromList $ map (HiValueNumber . toRational) $ unpack a
 doUnpack l = arityErr 1 l
 
 doPack :: [HiValue] -> Either HiError HiValue
-doPack [HiValueList l] = mapM intsToWord8s l <&> HiValueBytes . pack . toList
+doPack [HiValueList l] = mapM intsToWord8s l <&> HiValueBytes . pack . Data.Foldable.toList
 doPack l = arityErr 1 l
 
 intsToWord8s :: HiValue -> Either HiError Word8
@@ -166,7 +218,7 @@ doInitFold [f, HiValueList (x :<| (y :<| rest))] = apply f [x, y] >>= \acc -> fo
 doInitFold l = arityErr 2 l
 
 doList :: [HiValue] -> Either HiError HiValue
-doList = return . HiValueList . fromList
+doList = return . HiValueList . Data.Sequence.fromList
 
 doRange :: [HiValue] -> Either HiError HiValue
 doRange [HiValueNumber a, HiValueNumber b] = doList $ map HiValueNumber [a..b]
