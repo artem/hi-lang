@@ -57,7 +57,8 @@ pFun = choice
   , HiFunWrite <$ symbol "write"
   , HiFunMkDir <$ symbol "mkdir"
   , HiFunChDir <$ symbol "cd"
-  , HiFunParseTime <$ symbol "parse-time" ]
+  , HiFunParseTime <$ symbol "parse-time"
+  , HiFunRand <$ symbol "rand" ]
 
 consBinOp :: HiFun -> HiExpr -> HiExpr -> HiExpr
 consBinOp c a b = HiExprApply (HiExprValue $ HiValueFunction c) [a, b]

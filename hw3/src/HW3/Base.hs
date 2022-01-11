@@ -44,6 +44,7 @@ data HiFun =
   | HiFunMkDir
   | HiFunChDir
   | HiFunParseTime
+  | HiFunRand
   deriving (Eq, Ord, Show, Generic, Serialise)
 
 data HiValue =
@@ -78,6 +79,7 @@ data HiAction =
   | HiActionChDir FilePath
   | HiActionCwd
   | HiActionNow
+  | HiActionRand Int Int
   deriving (Eq, Ord, Show, Generic, Serialise)
 
 class Monad m => HiMonad m where

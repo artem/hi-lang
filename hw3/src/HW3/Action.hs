@@ -12,6 +12,7 @@ import Prelude hiding (readFile, writeFile)
 import Data.Text.Encoding (decodeUtf8')
 import Data.Sequence (fromList)
 import Data.Time (getCurrentTime)
+import System.Random (getStdRandom, Random (randomR))
 
 data HiPermission =
     AllowRead
@@ -48,6 +49,7 @@ instance HiMonad HIO where
   runAction (HiActionWrite x y) = verifyAndRun AllowWrite (HiValueNull <$ writeFile x y)
   runAction (HiActionMkDir x) = verifyAndRun AllowWrite (HiValueNull <$ createDirectory x)
   runAction HiActionNow = verifyAndRun AllowTime (HiValueTime <$> getCurrentTime)
+  runAction (HiActionRand x y) = HIO $ \_ -> HiValueNumber . toRational <$> getStdRandom (randomR (x,y))
 
 doReadFile :: FilePath -> IO HiValue
 doReadFile path = do

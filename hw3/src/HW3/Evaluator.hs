@@ -78,9 +78,17 @@ apply (HiValueFunction fun) = case fun of
    HiFunMkDir -> doSingleAction HiActionMkDir
    HiFunChDir -> doSingleAction HiActionChDir
    HiFunParseTime -> doParseTime
+   HiFunRand -> doRand
 apply (HiValueString s) = applyStr s
 apply (HiValueList l) = applyList l
 apply _ = const $ Left HiErrorInvalidFunction
+
+doRand :: [HiValue] -> Either HiError HiValue
+doRand [HiValueNumber a, HiValueNumber b] =
+    safeToInt a >>= \x ->
+    safeToInt b >>= \y ->
+        return $ HiValueAction $ HiActionRand x y
+doRand l = arityErr 2 l
 
 doParseTime :: [HiValue] -> Either HiError HiValue
 doParseTime [HiValueString x] = return $ maybe HiValueNull HiValueTime (readMaybe (T.unpack x))
@@ -264,6 +272,9 @@ doPlus l = arityErr 2 l
 
 isInt :: Rational -> Bool
 isInt x = denominator x == 1
+  && num >= fromIntegral (minBound :: Int)
+  && num <= fromIntegral (maxBound :: Int)
+  where num = numerator x
 
 semiMul :: Semigroup t => (t -> HiValue) -> t -> Rational -> Either HiError HiValue
 semiMul f a b
