@@ -12,7 +12,6 @@ import Data.Word (Word8)
 import Data.ByteString (pack, ByteString)
 import qualified Data.Char as Char
 import Data.Functor (void)
-import Data.Map.Strict (Map, insert, empty)
 import Data.Char (isAlpha, isAlphaNum)
 import Data.List (intercalate)
 

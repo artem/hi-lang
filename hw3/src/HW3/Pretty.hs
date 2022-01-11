@@ -12,8 +12,21 @@ import Text.Printf (printf)
 import Data.Word (Word8)
 import Data.Time (UTCTime)
 import Data.Map.Strict (Map, assocs)
+import Data.Ratio (numerator)
+import GHC.Real (denominator, Ratio ((:%)))
+import Data.Scientific (fromRationalRepetendUnlimited)
+import Data.Maybe (isNothing)
 
-instance Pretty Rational where pretty = unsafeViaShow
+instance Pretty Rational where
+  pretty x
+    | denominator x == 1 = pretty $ numerator x
+    | isNothing period = pretty $ show conv
+    | abs num < denom = fold [pretty num, pretty "/", pretty denom]
+    | otherwise = fold [pretty q, pretty $ if num > 0 then " + " else " - ", pretty (abs r), pretty "/", pretty denom]
+    where
+        (conv, period) = fromRationalRepetendUnlimited x
+        (num :% denom) = x
+        (q, r) = quotRem num denom
 
 instance Pretty UTCTime where pretty = unsafeViaShow
 
