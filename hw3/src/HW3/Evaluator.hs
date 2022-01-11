@@ -20,66 +20,54 @@ import Codec.Serialise (serialise, deserialise)
 import Text.Read (readMaybe)
 import Data.Time (addUTCTime, diffUTCTime)
 import Data.Map.Strict (fromList, Map, lookup, empty, lookupMin, deleteMin, insert, elems, keys)
+import Control.Monad.Trans.Except (runExceptT, ExceptT, throwE)
+import Control.Monad.Trans.Class (lift)
 
 eval :: HiMonad m => HiExpr -> m (Either HiError HiValue)
-eval (HiExprRun x) = do
-    res <- eval x
+eval expr = runExceptT (eval' expr)
+
+eval' :: HiMonad m => HiExpr -> ExceptT HiError m HiValue
+eval' (HiExprRun x) = do
+    res <- eval' x
     case res of
-      l@(Left _) -> return l
-      Right hv -> (case hv of
-         HiValueAction ha -> Right <$> runAction ha
-         _ -> return $ Left HiErrorInvalidArgument)
-eval (HiExprValue x) = return $ Right x
-eval (HiExprApply fexpr args) = do
-    f <- eval fexpr
-    case f of
-      l@(Left _) -> return l
-      Right hv -> evalLazy hv args
-eval (HiExprDict x) = do
-    res <- traverse pairEval x
-    let res' = sequenceA res -- TODO aaa
-    case res' of
-      (Left he) -> return $ Left he
-      Right x1 -> return $ return $ HiValueDict $ Data.Map.Strict.fromList x1
+         HiValueAction ha -> lift $ runAction ha
+         _ -> throwE HiErrorInvalidArgument
+eval' (HiExprValue x) = return x
+eval' (HiExprApply fexpr args) = do
+    f <- eval' fexpr
+    evalLazy f args
+eval' (HiExprDict x) = HiValueDict . Data.Map.Strict.fromList <$> traverse pairEval x
 
-pairEval :: HiMonad m => (HiExpr, HiExpr) -> m (Either HiError (HiValue, HiValue))
+pairEval :: HiMonad m => (HiExpr, HiExpr) -> ExceptT HiError m (HiValue, HiValue)
 pairEval (a, b) = do
-    x1 <- eval a
-    case x1 of
-      (Left he) -> return $ Left he
-      Right hv -> do
-          x2 <- eval b
-          case x2 of
-            (Left he) -> return $ Left he
-            Right hv' -> return $ return (hv, hv')
+    x1 <- eval' a
+    x2 <- eval' b
+    return (x1, x2)
 
-evalLazy :: HiMonad m => HiValue -> [HiExpr] -> m (Either HiError HiValue)
+evalLazy :: HiMonad m => HiValue -> [HiExpr] -> ExceptT HiError m HiValue
 evalLazy (HiValueFunction HiFunIf) [x, a, b] = do
-    cond <- eval x
+    cond <- eval' x
     case cond of
-      l@(Left _) -> return l
-      Right (HiValueBool bcond) -> if bcond then eval a else eval b
-      _ -> return $ Left HiErrorInvalidArgument
+      (HiValueBool bcond) -> if bcond then eval' a else eval' b
+      _ -> throwE HiErrorInvalidArgument
 evalLazy (HiValueFunction HiFunAnd) [a, b] = do
-    cond <- eval a
+    cond <- eval' a
     case cond of
-      l@(Left _) -> return l
-      r@(Right(HiValueBool bcond)) -> if bcond then eval b else return r
-      r@(Right HiValueNull) -> return r
-      _ -> eval b
+      r@(HiValueBool bcond) -> if bcond then eval' b else return r
+      HiValueNull -> return HiValueNull
+      _ -> eval' b
 evalLazy (HiValueFunction HiFunOr) [a, b] = do
-    cond <- eval a
+    cond <- eval' a
     case cond of
-      l@(Left _) -> return l
-      r@(Right(HiValueBool bcond)) -> if bcond then return r else eval b
-      Right HiValueNull -> eval b
+      r@((HiValueBool bcond)) -> if bcond then return r else eval' b
+      HiValueNull -> eval' b
       x -> return x
 evalLazy hv args = do
-          args' <- mapM eval args
-          let args'' = sequenceA args' -- TODO horrible
-          return $ case args'' of
-            (Left he) -> Left he
-            Right hvs -> apply hv hvs
+          args' <- mapM eval' args
+          let res = apply hv args'
+          case res of
+            Left he -> throwE he
+            Right hv' -> return hv'
 
 apply :: HiValue -> [HiValue] -> Either HiError HiValue
 apply (HiValueFunction fun) = case fun of
