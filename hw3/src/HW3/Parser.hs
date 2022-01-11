@@ -17,12 +17,14 @@ import Data.List (intercalate)
 
 type Parser = Parsec Void String
 
+-- | Helper functions
 lexeme :: Parser a -> Parser a
 lexeme = L.lexeme space
 
 symbol :: String -> Parser String
 symbol = L.symbol space
 
+-- | Parse functional keywords
 pFun :: Parser HiFun
 pFun = choice
   [ HiFunDiv <$ symbol "div"
@@ -67,6 +69,7 @@ pFun = choice
   , HiFunValues <$ symbol "values"
   , HiFunInvert <$ symbol "invert" ]
 
+-- | Operator table for makeExprParser
 consBinOp :: HiFun -> HiExpr -> HiExpr -> HiExpr
 consBinOp c a b = HiExprApply (HiExprValue $ HiValueFunction c) [a, b]
 
@@ -86,20 +89,21 @@ operators =
   , [ InfixR (consBinOp HiFunOr  <$ symbol "||") ]
   ]
 
+-- | Infix operators
 pOp :: Parser HiExpr
 pOp = makeExprParser pExpr operators
 
+-- | Parse boolean
 pBool :: Parser Bool
 pBool = choice
   [ True <$ symbol "true"
   , False <$ symbol "false" ]
 
+-- | Comma-separated expressions
 pParamList :: Parser [HiExpr]
 pParamList = try $ lexeme $ do
     ff <- pOp
-    tl <- try $ do
-        _ <- symbol ","
-        pParamList
+    tl <- try $ (symbol "," >> pParamList)
       <|> return []
     return $ ff : tl
   <|> return []
@@ -107,6 +111,7 @@ pParamList = try $ lexeme $ do
 parens :: Parser a -> Parser a
 parens = between (symbol "(") (symbol ")")
 
+-- | Parse bang, dot and argument application
 pPostfix :: HiExpr -> Parser HiExpr
 pPostfix cur = try (pAppl cur) <|> pExec cur <|> pProp cur <|> return cur
 
@@ -127,6 +132,7 @@ pExec fun = do
     void (symbol "!")
     pPostfix (HiExprRun fun)
 
+-- | Parse expression (no infix)
 pExpr :: Parser HiExpr
 pExpr = (parens pOp <|> try pList <|> try pDict <|> HiExprValue <$> pValue) >>= pPostfix
 
@@ -148,10 +154,11 @@ pMapPairs = try $ lexeme $ do
     ff <- pOp
     void (symbol ":")
     kk <- pOp
-    tl <- try (symbol "," >> pMapPairs) <|> return [] -- TODO bad parsing
+    tl <- try (symbol "," >> pMapPairs) <|> return []
     return $ (ff, kk) : tl
   <|> return []
 
+-- | String literal
 pStr :: Parser Text
 pStr = Data.Text.pack <$> (char '"' *> manyTill L.charLiteral (symbol "\""))
 
@@ -160,6 +167,7 @@ pList :: Parser HiExpr
 pList = HiExprApply (HiExprValue (HiValueFunction HiFunList))
   <$> between (symbol "[") (symbol "]") pParamList
 
+-- | ByteString [# #]
 pBs :: Parser ByteString
 pBs = Data.ByteString.pack <$> between (symbol "[#") (symbol "#]") pBytes
 

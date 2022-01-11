@@ -13,15 +13,16 @@ import Data.Either (fromRight)
 import Data.Functor ((<&>))
 import Data.ByteString (pack, unpack, append)
 import Data.Word (Word8)
-import Data.Foldable (toList)
+import Data.Foldable (toList, Foldable (foldl'))
 import Codec.Compression.Zlib (compressWith, bestCompression, CompressParams (compressLevel), defaultCompressParams, decompress)
 import Data.ByteString.Lazy (fromStrict, toStrict)
 import Codec.Serialise (serialise, deserialise)
 import Text.Read (readMaybe)
 import Data.Time (addUTCTime, diffUTCTime)
-import Data.Map.Strict (fromList, Map, lookup, empty, lookupMin, deleteMin, insert, elems, keys)
+import Data.Map.Strict (fromList, Map, lookup, empty, lookupMin, deleteMin, insert, elems, keys, adjust, member)
 import Control.Monad.Trans.Except (runExceptT, ExceptT, throwE)
 import Control.Monad.Trans.Class (lift)
+import Data.Text (singleton)
 
 eval :: HiMonad m => HiExpr -> m (Either HiError HiValue)
 eval expr = runExceptT (eval' expr)
@@ -59,7 +60,7 @@ evalLazy (HiValueFunction HiFunAnd) [a, b] = do
 evalLazy (HiValueFunction HiFunOr) [a, b] = do
     cond <- eval' a
     case cond of
-      r@((HiValueBool bcond)) -> if bcond then return r else eval' b
+      r@(HiValueBool bcond) -> if bcond then return r else eval' b
       HiValueNull -> eval' b
       x -> return x
 evalLazy hv args = do
@@ -105,7 +106,7 @@ apply (HiValueFunction fun) = case fun of
    HiFunParseTime -> doParseTime
    HiFunRand -> doRand
    HiFunEcho -> doEcho
-   HiFunCount -> undefined
+   HiFunCount -> doCount
    HiFunKeys -> doDictKeys
    HiFunValues -> doDictValues
    HiFunInvert -> doInvert
@@ -114,6 +115,20 @@ apply (HiValueString s) = applyStr s
 apply (HiValueList l) = applyList l
 apply (HiValueDict m) = applyMap m
 apply _ = const $ Left HiErrorInvalidFunction
+
+doCount :: [HiValue] -> Either HiError HiValue
+doCount [HiValueBytes bytes] = return $ HiValueDict $ countHelper (HiValueNumber . fromIntegral) (unpack bytes)
+doCount [HiValueList l] = return $ HiValueDict $ countHelper id l
+doCount [HiValueString s] = return $ HiValueDict $ countHelper (HiValueString . singleton) (T.unpack s)
+doCount l = arityErr 1 l
+
+countHelper :: Foldable t1 => (t2 -> HiValue) -> t1 t2 -> Map HiValue HiValue
+countHelper mapEl = foldl' (\l element -> if member (mapEl element) l
+                                   then adjust cnt (mapEl element) l
+                                   else insert (mapEl element) (HiValueNumber 1) l) empty
+                           where
+                            cnt (HiValueNumber x) = HiValueNumber $ x + 1
+                            cnt _ = error "Cannot increment HiValue"
 
 doDictValues :: [HiValue] -> Either HiError HiValue
 doDictValues [HiValueDict x] = return $ HiValueList $ Data.Sequence.fromList $ elems x
@@ -132,7 +147,7 @@ flipAL oldl =
                     Nothing -> accum
                     Just (k, v) -> case Data.Map.Strict.lookup v accum of
                                             Nothing -> worker (deleteMin left) (insert v [k] accum)
-                                            Just y  -> worker (deleteMin left) (insert v (k:y) accum)
+                                            Just _  -> worker (deleteMin left) (adjust (k:) v accum)
         in
         worker oldl empty
 

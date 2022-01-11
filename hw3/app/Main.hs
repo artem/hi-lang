@@ -26,8 +26,3 @@ main = runInputT defaultSettings loop
                                             Left y -> outputStrLn $ show y
                                     Left x -> outputStrLn $ show x
                                 loop
-            --    Just input -> do let res = parse input
-            --                     case res of
-            --                         Right x -> outputStrLn $ show x
-            --                         _ -> outputStrLn "eggog"
-            --                     loop
