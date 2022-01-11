@@ -4,6 +4,9 @@ import System.Console.Haskeline
 import HW3.Evaluator
 import HW3.Parser
 import HW3.Pretty
+import Control.Monad.IO.Class (liftIO)
+import HW3.Action (runHIO, HiPermission (AllowRead, AllowWrite))
+import Data.Set (fromList)
 
 main :: IO ()
 main = runInputT defaultSettings loop
@@ -17,7 +20,7 @@ main = runInputT defaultSettings loop
                Just input -> do let res = parse input
                                 case res of
                                     Right x -> do
-                                        v <- eval x
+                                        v <- liftIO $ runHIO (eval x) (fromList [AllowRead, AllowWrite])
                                         case v of
                                             Right y -> outputStrLn $ show (prettyValue y)
                                             Left y -> outputStrLn $ show y

@@ -5,14 +5,13 @@ import Data.Text (Text, pack)
 import Data.Void
 import Text.Megaparsec
 import Text.Megaparsec.Char
-import HW3.Base (HiExpr (..), HiValue (..), HiFun (..))
-import qualified Data.Char
+import HW3.Base (HiExpr (..), HiValue (..), HiFun (..), HiAction (..))
 import qualified Text.Megaparsec.Char.Lexer as L
-import Data.Functor (void)
 import Control.Monad.Combinators.Expr (Operator (..), makeExprParser)
 import Data.Word (Word8)
 import Data.ByteString (pack, ByteString)
 import qualified Data.Char as Char
+import Data.Functor (void)
 
 type Parser = Parsec Void String
 
@@ -53,7 +52,11 @@ pFun = choice
   , HiFunZip         <$ symbol "zip"
   , HiFunUnzip       <$ symbol "unzip"
   , HiFunSerialise   <$ symbol "serialise"
-  , HiFunDeserialise <$ symbol "deserialise" ]
+  , HiFunDeserialise <$ symbol "deserialise"
+  , HiFunRead  <$ symbol "read"
+  , HiFunWrite <$ symbol "write"
+  , HiFunMkDir <$ symbol "mkdir"
+  , HiFunChDir <$ symbol "cd" ]
 
 consBinOp :: HiFun -> HiExpr -> HiExpr -> HiExpr
 consBinOp c a b = HiExprApply (HiExprValue $ HiValueFunction c) [a, b]
@@ -99,18 +102,25 @@ pAppl :: HiExpr -> Parser HiExpr
 pAppl fun = do
     args <- parens pParamList
     let cur = HiExprApply fun args
-    try (pAppl cur) <|> return cur
+    try (pAppl cur) <|> pExec cur <|> return cur
+
+pExec :: HiExpr -> Parser HiExpr
+pExec fun = do
+    void (symbol "!")
+    let cur = HiExprRun fun
+    try (pAppl cur) <|> pExec cur <|> return cur
 
 pExpr :: Parser HiExpr
 pExpr = do
     fun <- parens pOp <|> try pList <|> HiExprValue <$> pValue
-    try $ pAppl fun <|> return fun
+    try $ pAppl fun <|> pExec fun <|> return fun
 
 pValue :: Parser HiValue
 pValue = try (HiValueFunction <$> pFun)
   <|> (HiValueBool <$> pBool)
-  <|> (HiValueNumber <$> pNum)
   <|> (HiValueNull <$ symbol "null")
+  <|> (HiValueAction HiActionCwd <$ symbol "cwd")
+  <|> (HiValueNumber <$> pNum)
   <|> (HiValueString <$> pStr)
   <|> (HiValueBytes <$> pBs)
 

@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 module HW3.Evaluator where
-import HW3.Base (HiError (..), HiValue (..), HiExpr (..), HiFun (..), HiMonad)
+import HW3.Base (HiError (..), HiValue (..), HiExpr (..), HiFun (..), HiMonad (runAction), HiAction (..))
 import Control.Monad ((>=>), foldM)
 import qualified Data.Text as T
 import Data.Semigroup (stimes)
@@ -19,14 +19,25 @@ import Data.ByteString.Lazy (fromStrict, toStrict)
 import Codec.Serialise (serialise, deserialise)
 
 eval :: HiMonad m => HiExpr -> m (Either HiError HiValue)
-eval = return . evalInEitherMonad
+eval (HiExprRun x) = do
+    res <- eval x
+    case res of
+      l@(Left _) -> return l
+      Right hv -> (case hv of
+         HiValueAction ha -> Right <$> runAction ha
+         _ -> return $ Left HiErrorInvalidArgument)
+eval (HiExprValue x) = return $ Right x
+eval (HiExprApply fexpr args) = do
+    f <- eval fexpr
+    case f of
+      l@(Left _) -> return l
+      Right hv -> do
+          args' <- mapM eval args
+          let args'' = sequenceA args'
+          return $ case args'' of
+            (Left he) -> Left he
+            Right hvs -> apply hv hvs
 
-evalInEitherMonad :: HiExpr -> Either HiError HiValue
-evalInEitherMonad (HiExprValue x) = Right x
-evalInEitherMonad (HiExprApply fexpr args) = do
-    xxx <- evalInEitherMonad fexpr
-    args' <- evalListInEitherMonad args
-    apply xxx args'
 
 apply :: HiValue -> [HiValue] -> Either HiError HiValue
 apply (HiValueFunction fun) = case fun of
@@ -60,9 +71,21 @@ apply (HiValueFunction fun) = case fun of
    HiFunUnzip -> doUnzip
    HiFunSerialise -> doSerialise
    HiFunDeserialise -> doDeserialise
+   HiFunRead -> doSingleAction HiActionRead
+   HiFunWrite -> doWrite
+   HiFunMkDir -> doSingleAction HiActionMkDir
+   HiFunChDir -> doSingleAction HiActionChDir
 apply (HiValueString s) = applyStr s
 apply (HiValueList l) = applyList l
 apply _ = const $ Left HiErrorInvalidFunction
+
+doSingleAction :: (String -> HiAction) -> [HiValue] -> Either HiError HiValue
+doSingleAction f [HiValueString x] = return $ HiValueAction $ f (T.unpack x)
+doSingleAction _ l = arityErr 1 l
+
+doWrite :: [HiValue] -> Either HiError HiValue
+doWrite [HiValueString x, HiValueString y] = return $ HiValueAction $ HiActionWrite (T.unpack x) (encodeUtf8 y)
+doWrite l = arityErr 1 l
 
 doDeserialise :: [HiValue] -> Either HiError HiValue
 doDeserialise [HiValueBytes a] = return $ deserialise $ fromStrict a
@@ -256,6 +279,3 @@ doDiv [HiValueNumber a, HiValueNumber b]
   | otherwise = Left HiErrorDivideByZero
 doDiv [HiValueString a, HiValueString b] = return $ HiValueString (T.intercalate "/" [a, b])
 doDiv l = arityErr 2 l
-
-evalListInEitherMonad :: [HiExpr] -> Either HiError [HiValue]
-evalListInEitherMonad = mapM evalInEitherMonad

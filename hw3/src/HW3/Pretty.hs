@@ -1,4 +1,5 @@
 {-# LANGUAGE FlexibleInstances #-}
+{-# OPTIONS_GHC -Wno-orphans #-}
 
 module HW3.Pretty where
 import HW3.Base (HiValue (..), HiFun (..))

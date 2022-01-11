@@ -38,6 +38,10 @@ data HiFun =
   | HiFunUnzip
   | HiFunSerialise
   | HiFunDeserialise
+  | HiFunRead
+  | HiFunWrite
+  | HiFunMkDir
+  | HiFunChDir
   deriving (Eq, Ord, Show, Generic, Serialise)
 
 data HiValue =
@@ -48,11 +52,13 @@ data HiValue =
   | HiValueString Text
   | HiValueList (Seq HiValue)
   | HiValueBytes ByteString
+  | HiValueAction HiAction
   deriving (Eq, Ord, Show, Generic, Serialise)
 
 data HiExpr =
     HiExprValue HiValue
   | HiExprApply HiExpr [HiExpr]
+  | HiExprRun HiExpr
   deriving (Eq, Ord, Show)
 
 data HiError =
@@ -60,7 +66,7 @@ data HiError =
   | HiErrorInvalidFunction
   | HiErrorArityMismatch
   | HiErrorDivideByZero
-  deriving (Eq, Ord, Show)
+  deriving (Show)
 
 data HiAction =
     HiActionRead  FilePath
@@ -68,6 +74,7 @@ data HiAction =
   | HiActionMkDir FilePath
   | HiActionChDir FilePath
   | HiActionCwd
+  deriving (Eq, Ord, Show, Generic, Serialise)
 
 class Monad m => HiMonad m where
   runAction :: HiAction -> m HiValue
