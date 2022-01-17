@@ -109,10 +109,17 @@ apply (HiValueFunction fun) = case fun of
    HiFunKeys -> doDictKeys
    HiFunValues -> doDictValues
    HiFunInvert -> doInvert
-   _ -> const $ Left HiErrorInvalidFunction
+   -- Lazy functions
+   HiFunAnd -> arityErr 2
+   HiFunOr -> arityErr 2
+   HiFunIf -> arityErr 3
 apply (HiValueString s) = applyStr s
 apply (HiValueList l) = applyList l
-apply (HiValueBytes b) = applyList $ unpackHelper b
+apply (HiValueBytes b) = applyList (unpackHelper b) >=> \x -> case x of
+  HiValueNull -> return x
+  HiValueNumber _ -> return x
+  HiValueList _ -> doPack [x]
+  _ -> undefined
 apply (HiValueDict m) = applyMap m
 apply _ = const $ Left HiErrorInvalidFunction
 
@@ -212,7 +219,7 @@ doPack l = arityErr 1 l
 
 intsToWord8s :: HiValue -> Either HiError Word8
 intsToWord8s (HiValueNumber x) = safeToInt x >>= \n ->
-    if n < 256 && n > 0
+    if n < 256 && n >= 0
     then return $ fromIntegral n
     else Left HiErrorInvalidArgument
 intsToWord8s _ = Left HiErrorInvalidArgument
@@ -261,6 +268,7 @@ applyStr t [HiValueNumber a] = do
     let s = T.unpack t
     if x < 0 || x >= length s then return HiValueNull
     else return $ HiValueString $ T.singleton $ s !! x
+applyStr _ l@[_] = arityErr 1 l
 applyStr t [HiValueNumber a, HiValueNumber b] = do
     x <- safeToInt a
     y <- safeToInt b
@@ -278,6 +286,7 @@ applyList :: Seq HiValue -> [HiValue] -> Either HiError HiValue
 applyList l [HiValueNumber a] = do
     x <- safeToInt a
     return $ fromMaybe HiValueNull (Data.Sequence.lookup x l)
+applyList _ l@[_] = arityErr 1 l
 applyList l [HiValueNumber a, HiValueNumber b] = do
     x <- safeToInt a
     y <- safeToInt b
